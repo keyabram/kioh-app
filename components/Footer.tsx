@@ -27,7 +27,7 @@ export default function Footer() {
           </p>
 
           <Link
-            href="#opportunities"
+            href="/#opportunities"
             className="mt-9 inline-flex items-center gap-3 rounded-full bg-white px-7 py-4 font-semibold text-slate-950 transition duration-300 hover:-translate-y-1 hover:bg-teal-300 shadow-xl shadow-white/10"
           >
             Start your journey
@@ -44,6 +44,12 @@ export default function Footer() {
             <p className="mt-2 text-slate-500">From potential → opportunity → capability → impact.</p>
           </div>
           <div>
+            <Link
+              href="/contact"
+              className="inline-flex min-h-10 items-center text-sm font-semibold text-emerald-200 transition hover:text-white"
+            >
+              Contact Us
+            </Link>
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
               Follow KIOH
             </p>

@@ -11,12 +11,13 @@ import { UserProfile } from "@/server/types";
 
 interface HeaderProps {
   currentUser: UserProfile | null;
-  onLoginSuccess: (user: UserProfile) => void;
-  onLogout: () => void;
-  onOpenProfile: () => void;
+  onLoginSuccess?: (user: UserProfile) => void;
+  onLogout?: () => void;
+  onOpenProfile?: () => void;
   authOpen?: boolean;
   onAuthOpenChange?: (open: boolean) => void;
   redirectOnLogin?: string;
+  hideAccountActions?: boolean;
 }
 
 export default function Header({
@@ -27,6 +28,7 @@ export default function Header({
   authOpen: controlledAuthOpen,
   onAuthOpenChange,
   redirectOnLogin = "/dashboard",
+  hideAccountActions = false,
 }: HeaderProps) {
   const { data: session, status } = useSession();
   const [localAuthOpen, setLocalAuthOpen] = useState(false);
@@ -63,7 +65,7 @@ export default function Header({
       if (status === "authenticated") {
         await signOut({ redirectTo: "/" });
       }
-      onLogout();
+      onLogout?.();
     } catch (error) {
       console.error("[SIGN_OUT_ERROR]:", error);
       setSignOutError("Could not sign out. Please try again.");
@@ -89,7 +91,7 @@ export default function Header({
             />
           </Link>
 
-          <div className="hidden items-center gap-6 lg:flex">
+          <div className="hidden items-center gap-4 xl:flex">
             <Link href="/#identity" className="text-sm text-slate-300 transition hover:text-emerald-200">
               About Us
             </Link>
@@ -108,6 +110,9 @@ export default function Header({
             <Link href="/#journey" className="text-sm text-slate-300 transition hover:text-emerald-200">
               Roadmap 2045
             </Link>
+            <Link href="/contact" className="text-sm text-slate-300 transition hover:text-emerald-200">
+              Contact Us
+            </Link>
           </div>
 
           <div className="ml-auto flex items-center gap-2">
@@ -118,7 +123,7 @@ export default function Header({
               Become a Mentor
             </Link>
 
-            {activeUser ? (
+            {!hideAccountActions && (activeUser ? (
               <div className="relative">
                 {session?.user?.id && <NotificationMenu />}
                 <button
@@ -161,7 +166,7 @@ export default function Header({
                         type="button"
                         onClick={() => {
                           setIsUserMenuOpen(false);
-                          onOpenProfile();
+                          onOpenProfile?.();
                         }}
                         className="min-h-11 w-full rounded-lg px-3 py-2 text-left text-sm text-slate-300 hover:bg-white/5 hover:text-white"
                       >
@@ -189,14 +194,14 @@ export default function Header({
                 <span className="sm:hidden">Sign in</span>
                 <span className="hidden sm:inline">Sign In / Join</span>
               </button>
-            )}
+            ))}
 
             <button
               type="button"
               onClick={() => setIsMobileNavOpen((open) => !open)}
               aria-label={isMobileNavOpen ? "Close navigation menu" : "Open navigation menu"}
               aria-expanded={isMobileNavOpen}
-              className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/5 text-lg text-white transition hover:bg-white/10 lg:hidden"
+              className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/5 text-lg text-white transition hover:bg-white/10 xl:hidden"
             >
               {isMobileNavOpen ? (
                 <XMarkIcon className="h-6 w-6" aria-hidden="true" />
@@ -207,7 +212,7 @@ export default function Header({
           </div>
 
           {isMobileNavOpen && (
-            <div className="grid w-full grid-cols-2 gap-2 border-t border-white/10 pt-3 lg:hidden">
+            <div className="grid w-full grid-cols-2 gap-2 border-t border-white/10 pt-3 xl:hidden">
               {[
                 ["About Us", "/#identity"],
                 ["Scholarships & Funding", "/#opportunities"],
@@ -215,6 +220,7 @@ export default function Header({
                 ["Mentorship", "/#mentorship"],
                 ["Partners & Donors", "/#stakeholders"],
                 ["Roadmap 2045", "/#journey"],
+                ["Contact Us", "/contact"],
                 ["Become a Mentor", "/apply-mentor"],
               ].map(([label, href]) => (
                 <Link
@@ -236,7 +242,7 @@ export default function Header({
         onClose={() => setIsAuthOpen(false)}
         redirectTo={redirectOnLogin}
         onLoginSuccess={(user) => {
-          onLoginSuccess(user);
+          onLoginSuccess?.(user);
           setIsAuthOpen(false);
         }}
       />
