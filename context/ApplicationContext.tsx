@@ -1,10 +1,11 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext, useState, useEffect, startTransition } from "react";
 import { useSession } from "next-auth/react";
 import { Opportunity } from "@/server/types/opportunity";
 import { Mentor } from "@/server/types/mentor";
 import type { UploadedDocument } from "@/server/types/uploads";
+import { SAVED_OPPORTUNITIES_KEY } from "@/utils/savedOpportunities";
 
 export interface ApplicationDocuments {
   pitchDeck?: UploadedDocument;
@@ -34,6 +35,12 @@ export interface BookedSession {
 interface ApplicationContextType {
   appliedOpportunities: AppliedOpportunity[];
   bookedSessions: BookedSession[];
+  savedOpportunityIds: string[];
+  savedOpportunitiesLoading: boolean;
+  setOpportunitySaved: (
+    opportunityId: string,
+    isSaved: boolean
+  ) => Promise<void>;
   applyToOpportunity: (
     opportunity: Opportunity,
     documents?: ApplicationDocuments
@@ -44,7 +51,7 @@ interface ApplicationContextType {
     day: string,
     timeSlot: string,
     topic: string
-  ) => BookedSession;
+  ) => Promise<BookedSession>;
   hasBookedMentor: (mentorId: string) => boolean;
 }
 
@@ -55,29 +62,22 @@ const ApplicationContext = createContext<ApplicationContextType | undefined>(
 const LOCAL_STORAGE_KEY_APPS = "kioh_applied_opportunities";
 const LOCAL_STORAGE_KEY_SESSIONS = "kioh_booked_sessions";
 
-function getNextSessionDate(day: string, timeSlot: string): string {
-  const weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-  const targetDay = weekdays.indexOf(day);
-  const timeMatch = /^(\d{1,2}):(\d{2})\s*(AM|PM)$/i.exec(timeSlot);
-  if (targetDay < 0 || !timeMatch) {
-    throw new Error("Choose a valid session day and time.");
+function readGuestSavedOpportunityIds() {
+  try {
+    const storedIds = localStorage.getItem(SAVED_OPPORTUNITIES_KEY);
+    if (!storedIds) return [];
+    const parsedIds: unknown = JSON.parse(storedIds);
+    if (!Array.isArray(parsedIds)) return [];
+    return [...new Set(
+      parsedIds.filter(
+        (id): id is string =>
+          typeof id === "string" && id.length > 0 && id.length <= 128
+      )
+    )].slice(0, 500);
+  } catch (error) {
+    console.error("Failed to load saved opportunities from this browser:", error);
+    return [];
   }
-
-  const [, hourText, minuteText, meridiem] = timeMatch;
-  let hour = Number(hourText) % 12;
-  if (meridiem.toUpperCase() === "PM") hour += 12;
-  const minute = Number(minuteText);
-  if (minute > 59) {
-    throw new Error("Choose a valid session time.");
-  }
-
-  const now = new Date();
-  const scheduledAt = new Date(now);
-  const daysAhead = (targetDay - now.getDay() + 7) % 7;
-  scheduledAt.setDate(now.getDate() + daysAhead);
-  scheduledAt.setHours(hour, minute, 0, 0);
-  if (scheduledAt <= now) scheduledAt.setDate(scheduledAt.getDate() + 7);
-  return scheduledAt.toISOString();
 }
 
 function isBookedSession(value: unknown): value is BookedSession {
@@ -115,10 +115,16 @@ export const ApplicationProvider: React.FC<{ children: React.ReactNode }> = ({
     AppliedOpportunity[]
   >([]);
   const [bookedSessions, setBookedSessions] = useState<BookedSession[]>([]);
+  const [savedOpportunityIds, setSavedOpportunityIds] = useState<string[]>([]);
+  const [savedOpportunityOwner, setSavedOpportunityOwner] = useState<string | null>(
+    null
+  );
   const [bookedSessionsOwner, setBookedSessionsOwner] = useState<string | null>(
     null
   );
   const sessionOwner = userId || "guest";
+  const savedOpportunitiesLoading =
+    status === "loading" || savedOpportunityOwner !== sessionOwner;
   const sessionsStorageKey = userId
     ? `${LOCAL_STORAGE_KEY_SESSIONS}:${encodeURIComponent(userId)}`
     : LOCAL_STORAGE_KEY_SESSIONS;
@@ -129,7 +135,42 @@ export const ApplicationProvider: React.FC<{ children: React.ReactNode }> = ({
     let cancelled = false;
 
     const loadData = async () => {
-      try {
+      if (userId) {
+        setBookedSessions([]);
+        setBookedSessionsOwner(sessionOwner);
+        try {
+          const response = await fetch("/api/mentor-sessions", {
+            cache: "no-store",
+          });
+          const result = await response.json();
+          if (!response.ok || !Array.isArray(result.data)) {
+            throw new Error(result.message || "Failed to load mentorship sessions.");
+          }
+          if (!result.data.every(isBookedSession)) {
+            throw new Error("Mentorship session data has an invalid format.");
+          }
+          if (!cancelled) setBookedSessions(result.data);
+        } catch (error) {
+          if (!cancelled) {
+            console.error("Failed to load mentorship sessions:", error);
+          }
+        }
+
+        try {
+          setAppliedOpportunities([]);
+          const response = await fetch("/api/applications", { cache: "no-store" });
+          const result = await response.json();
+          if (!response.ok) {
+            throw new Error(result.message || "Failed to load applications.");
+          }
+          if (!cancelled) setAppliedOpportunities(result.data);
+        } catch (error) {
+          if (!cancelled) {
+            console.error("Failed to load applications:", error);
+          }
+        }
+      } else {
+        try {
         const savedSessions = localStorage.getItem(sessionsStorageKey);
         if (savedSessions && !cancelled) {
           const parsedSessions: unknown = JSON.parse(savedSessions);
@@ -146,24 +187,14 @@ export const ApplicationProvider: React.FC<{ children: React.ReactNode }> = ({
           setBookedSessions([]);
           setBookedSessionsOwner(sessionOwner);
         }
-
-        if (userId) {
-          setAppliedOpportunities([]);
-          const response = await fetch("/api/applications");
-          const result = await response.json();
-          if (!response.ok) {
-            throw new Error(result.message || "Failed to load applications.");
-          }
-          if (!cancelled) setAppliedOpportunities(result.data);
-        } else {
           const savedApps = localStorage.getItem(LOCAL_STORAGE_KEY_APPS);
           if (savedApps && !cancelled) {
             setAppliedOpportunities(JSON.parse(savedApps));
           }
-        }
-      } catch (error) {
-        if (!cancelled) {
-          console.error("Failed to load saved KIOH data:", error);
+        } catch (error) {
+          if (!cancelled) {
+            console.error("Failed to load saved KIOH data:", error);
+          }
         }
       }
     };
@@ -173,6 +204,64 @@ export const ApplicationProvider: React.FC<{ children: React.ReactNode }> = ({
       cancelled = true;
     };
   }, [status, userId, sessionOwner, sessionsStorageKey]);
+
+  useEffect(() => {
+    if (status === "loading") return;
+    let cancelled = false;
+
+    const loadSavedOpportunities = async () => {
+      const guestIds = readGuestSavedOpportunityIds();
+      let resolvedIds = guestIds;
+
+      if (userId) {
+        try {
+          const response = await fetch("/api/saved-opportunities", {
+            cache: "no-store",
+          });
+          const result = await response.json();
+          if (!response.ok || !Array.isArray(result.data)) {
+            throw new Error(result.message || "Failed to load saved opportunities.");
+          }
+          const accountIds = result.data.filter(
+            (id: unknown): id is string => typeof id === "string"
+          );
+          resolvedIds = [...new Set([...accountIds, ...guestIds])];
+
+          if (guestIds.length > 0) {
+            const syncResponse = await fetch("/api/saved-opportunities", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ opportunityIds: resolvedIds }),
+            });
+            const syncResult = await syncResponse.json();
+            if (!syncResponse.ok || !Array.isArray(syncResult.data)) {
+              throw new Error(
+                syncResult.message || "Failed to sync browser bookmarks."
+              );
+            }
+            resolvedIds = syncResult.data.filter(
+              (id: unknown): id is string => typeof id === "string"
+            );
+            localStorage.removeItem(SAVED_OPPORTUNITIES_KEY);
+          }
+        } catch (error) {
+          console.error("Failed to sync saved opportunities:", error);
+        }
+      }
+
+      if (!cancelled) {
+        startTransition(() => {
+          setSavedOpportunityIds(resolvedIds);
+          setSavedOpportunityOwner(sessionOwner);
+        });
+      }
+    };
+
+    void loadSavedOpportunities();
+    return () => {
+      cancelled = true;
+    };
+  }, [status, userId, sessionOwner]);
 
   // Keep local storage only for users who are not signed in.
   useEffect(() => {
@@ -186,6 +275,24 @@ export const ApplicationProvider: React.FC<{ children: React.ReactNode }> = ({
       console.error("Failed to persist applications:", error);
     }
   }, [appliedOpportunities, status, userId]);
+
+  useEffect(() => {
+    if (
+      status === "loading" ||
+      userId ||
+      savedOpportunityOwner !== "guest"
+    ) {
+      return;
+    }
+    try {
+      localStorage.setItem(
+        SAVED_OPPORTUNITIES_KEY,
+        JSON.stringify(savedOpportunityIds)
+      );
+    } catch (error) {
+      console.error("Failed to persist saved opportunities:", error);
+    }
+  }, [savedOpportunityIds, savedOpportunityOwner, status, userId]);
 
   // Keep local bookings isolated by account on shared browsers.
   useEffect(() => {
@@ -250,26 +357,64 @@ export const ApplicationProvider: React.FC<{ children: React.ReactNode }> = ({
     return appliedOpportunities.some((a) => a.opportunity.id === opportunityId);
   };
 
-  const bookMentorSession = (
+  const setOpportunitySaved = async (
+    opportunityId: string,
+    isSaved: boolean
+  ) => {
+    if (savedOpportunitiesLoading) {
+      throw new Error("Saved opportunities are still loading. Please try again.");
+    }
+
+    if (userId) {
+      const response = await fetch("/api/saved-opportunities", {
+        method: isSaved ? "POST" : "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ opportunityId }),
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.message || "Could not update saved opportunities.");
+      }
+    }
+
+    setSavedOpportunityIds((currentIds) => {
+      if (isSaved) {
+        return currentIds.includes(opportunityId)
+          ? currentIds
+          : [...currentIds, opportunityId];
+      }
+      return currentIds.filter((id) => id !== opportunityId);
+    });
+  };
+
+  const bookMentorSession = async (
     mentor: Mentor,
     day: string,
     timeSlot: string,
     topic: string
-  ) => {
-    const newSession: BookedSession = {
-      id: `session-${Date.now()}`,
-      mentor,
-      day,
-      timeSlot,
-      topic,
-      bookedAt: new Date().toISOString().split("T")[0],
-      scheduledAt: getNextSessionDate(day, timeSlot),
-      status: "Upcoming",
-    };
+  ): Promise<BookedSession> => {
+    if (!userId) {
+      throw new Error("Sign in to book a session with this mentor.");
+    }
 
-    setBookedSessions((prev) => [newSession, ...prev]);
+    const response = await fetch("/api/mentor-sessions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        mentorApplicationId: mentor.id,
+        day,
+        timeSlot,
+        topic,
+      }),
+    });
+    const result = await response.json();
+    if (!response.ok || !isBookedSession(result.data)) {
+      throw new Error(result.message || "Failed to book mentorship session.");
+    }
+
+    setBookedSessions((prev) => [result.data, ...prev]);
     setBookedSessionsOwner(sessionOwner);
-    return newSession;
+    return result.data;
   };
 
   const hasBookedMentor = (mentorId: string) => {
@@ -285,6 +430,10 @@ export const ApplicationProvider: React.FC<{ children: React.ReactNode }> = ({
         appliedOpportunities,
         bookedSessions:
           bookedSessionsOwner === sessionOwner ? bookedSessions : [],
+        savedOpportunityIds:
+          savedOpportunityOwner === sessionOwner ? savedOpportunityIds : [],
+        savedOpportunitiesLoading,
+        setOpportunitySaved,
         applyToOpportunity,
         hasAppliedToOpportunity,
         bookMentorSession,

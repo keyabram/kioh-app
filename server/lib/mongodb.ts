@@ -1,6 +1,7 @@
 import { Db, Document, MongoClient } from "mongodb";
-import type { UserRole } from "@/server/types";
+import type { CareerStage, UserRole } from "@/server/types";
 import type { Opportunity, OpportunityCategory } from "@/server/types/opportunity";
+import type { Mentor } from "@/server/types/mentor";
 import type {
   VentureDomain,
   VentureReviewStatus,
@@ -18,6 +19,12 @@ export interface UserDocument extends Document {
   location: string | null;
   organization: string | null;
   bio: string | null;
+  careerStage?: CareerStage | null;
+  skills?: string[];
+  interests?: string[];
+  experience?: string | null;
+  goals?: string | null;
+  supportNeeds?: string[];
   navigatorVerifiedAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
@@ -59,6 +66,13 @@ export interface ApplicationDocument extends Document {
   reviewedBy?: string;
 }
 
+export interface SavedOpportunityDocument extends Document {
+  _id: string;
+  userId: string;
+  opportunityId: string;
+  savedAt: Date;
+}
+
 export interface UserUploadDocument extends Document {
   _id: string;
   userId: string;
@@ -81,6 +95,9 @@ export interface MentorApplicationDocument extends Document {
   specialties: string[];
   bio: string;
   linkedinUrl: string;
+  websiteUrl?: string | null;
+  githubUrl?: string | null;
+  xUrl?: string | null;
   availableDays: string[];
   certificateKeys: string[];
   publicProfileConsent?: boolean;
@@ -88,6 +105,22 @@ export interface MentorApplicationDocument extends Document {
   createdAt: Date;
   reviewedAt?: Date;
   reviewedBy?: string;
+}
+
+export interface MentorSessionDocument extends Document {
+  _id: string;
+  mentorApplicationId: string;
+  mentorUserId: string;
+  menteeUserId: string;
+  menteeName: string;
+  mentor: Mentor;
+  day: string;
+  timeSlot: string;
+  topic: string;
+  scheduledAt: Date;
+  status: "Upcoming" | "Completed" | "Cancelled";
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export interface EcosystemInquiryDocument extends Document {
@@ -189,12 +222,26 @@ export async function getDb(): Promise<Db> {
         db.collection("applications").createIndex({ userId: 1, appliedAt: -1 }),
         db.collection("applications").createIndex({ appliedAt: 1 }),
         db.collection("applications").createIndex({ status: 1, appliedAt: 1 }),
+        db.collection<SavedOpportunityDocument>("savedOpportunities").createIndex(
+          { userId: 1, opportunityId: 1 },
+          { unique: true }
+        ),
+        db.collection<SavedOpportunityDocument>("savedOpportunities").createIndex(
+          { userId: 1, savedAt: -1 }
+        ),
         db.collection("userUploads").createIndex(
           { userId: 1, category: 1, _id: 1 },
           { unique: true }
         ),
         db.collection("mentorApplications").createIndex(
           { userId: 1, createdAt: -1 }
+        ),
+        db.collection<MentorSessionDocument>("mentorSessions").createIndex(
+          { menteeUserId: 1, scheduledAt: -1 }
+        ),
+        db.collection<MentorSessionDocument>("mentorSessions").createIndex(
+          { mentorUserId: 1, scheduledAt: 1 },
+          { unique: true }
         ),
         db.collection("ecosystemInquiries").createIndex({ createdAt: -1 }),
         db.collection<VerifiedOrganizationDocument>("verifiedOrganizations")

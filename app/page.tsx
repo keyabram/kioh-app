@@ -12,6 +12,7 @@ import StakeholdersSection from "@/components/StakeholdersSection";
 import EcosystemNetwork from "@/components/EcosystemNetwork";
 import JourneyRoadmap from "@/components/JourneyRoadmap";
 import Footer from "@/components/Footer";
+import JoinModal from "@/components/JoinModal";
 import ProfileSetupModal from "@/components/ProfileSetupModal";
 import ScrollReveal from "@/components/ScrollReveal";
 import { UserProfile } from "@/server/types";
@@ -21,6 +22,7 @@ export default function Home() {
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [isContactModalOpen, setIsContactModalOpen] = useState(false);
   const [verificationNotice, setVerificationNotice] = useState<{
     success: boolean;
     text: string;
@@ -75,6 +77,12 @@ export default function Home() {
         bio: session.user.bio || "",
         location: session.user.location || "",
         organization: session.user.organization || "",
+        careerStage: session.user.careerStage || "other",
+        skills: session.user.skills || [],
+        interests: session.user.interests || [],
+        experience: session.user.experience || "",
+        goals: session.user.goals || "",
+        supportNeeds: session.user.supportNeeds || [],
         createdAt: new Date(),
       };
 
@@ -107,6 +115,12 @@ export default function Home() {
         location: updatedUser.location,
         bio: updatedUser.bio,
         organization: updatedUser.organization,
+        careerStage: updatedUser.careerStage,
+        skills: updatedUser.skills,
+        interests: updatedUser.interests,
+        experience: updatedUser.experience,
+        goals: updatedUser.goals,
+        supportNeeds: updatedUser.supportNeeds,
       });
     }
 
@@ -124,6 +138,7 @@ export default function Home() {
           setCurrentUser(null);
         }}
         onOpenProfile={() => setIsProfileModalOpen(true)}
+        onContactOpen={() => setIsContactModalOpen(true)}
         authOpen={isAuthModalOpen}
         onAuthOpenChange={setIsAuthModalOpen}
       />
@@ -163,7 +178,13 @@ export default function Home() {
       <ScrollReveal><StakeholdersSection /></ScrollReveal>
       <ScrollReveal><EcosystemNetwork /></ScrollReveal>
       <ScrollReveal><JourneyRoadmap /></ScrollReveal>
-      <Footer />
+      <Footer onContactOpen={() => setIsContactModalOpen(true)} />
+
+      <JoinModal
+        isOpen={isContactModalOpen}
+        onClose={() => setIsContactModalOpen(false)}
+        defaultRole="builder"
+      />
 
       {/* Profile Onboarding / Editing Modal */}
       {currentUser && (

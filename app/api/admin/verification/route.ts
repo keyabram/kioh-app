@@ -9,6 +9,7 @@ import {
   type UserUploadDocument,
   type VerifiedOrganizationDocument,
 } from "@/server/lib/mongodb";
+import { normalizeMentorSocialUrl } from "@/utils/mentorSocialUrls";
 
 async function isAdmin() {
   const session = await auth();
@@ -71,7 +72,17 @@ export async function GET() {
           experienceYears: application.experienceYears,
           specialties: application.specialties,
           bio: application.bio,
-          linkedinUrl: application.linkedinUrl,
+          linkedinUrl:
+            normalizeMentorSocialUrl(application.linkedinUrl, "linkedin") ?? "",
+          websiteUrl: application.websiteUrl
+            ? normalizeMentorSocialUrl(application.websiteUrl, "website")
+            : null,
+          githubUrl: application.githubUrl
+            ? normalizeMentorSocialUrl(application.githubUrl, "github")
+            : null,
+          xUrl: application.xUrl
+            ? normalizeMentorSocialUrl(application.xUrl, "x")
+            : null,
           availableDays: application.availableDays,
           createdAt: application.createdAt,
           certificates: application.certificateKeys.flatMap((key) => {

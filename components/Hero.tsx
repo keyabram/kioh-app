@@ -34,7 +34,7 @@ export default function Hero() {
           transition={{ duration: 0.5, ease: "easeOut" }}
           className="relative"
         >
-          <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200/20 bg-emerald-200/[0.07] px-3.5 py-2 text-[11px] font-semibold tracking-wide text-emerald-100 sm:text-xs">
+          <div className="section-kicker inline-flex items-center gap-2 rounded-full border border-emerald-200/20 bg-emerald-200/[0.07] px-3.5 py-2 text-[11px] font-semibold tracking-[0.18em] text-emerald-100 sm:text-xs">
             <span className="relative flex h-2 w-2">
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-300 opacity-50" />
               <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-300" />
@@ -42,9 +42,9 @@ export default function Hero() {
             Kenya-born. Africa-facing. Future-focused.
           </div>
 
-          <h1 className="mt-6 max-w-4xl text-[2.7rem] font-semibold leading-[1.04] tracking-[-0.045em] text-white sm:text-6xl lg:text-7xl xl:text-[5.25rem]">
+          <h1 className="display-heading mt-6 max-w-4xl text-[2.7rem] font-semibold leading-[1.04] text-white sm:text-6xl lg:text-7xl xl:text-[5.25rem]">
             Potential is everywhere.
-            <span className="mt-2 block bg-gradient-to-r from-emerald-200 via-teal-200 to-cyan-200 bg-clip-text text-transparent">
+            <span className="mt-2 block bg-gradient-to-r from-emerald-200 via-teal-200 to-cyan-200 bg-clip-text text-transparent animate-gradient">
               Opportunity should be, too.
             </span>
           </h1>
@@ -55,7 +55,7 @@ export default function Hero() {
 
           <div className="mt-8 grid gap-3 sm:flex sm:flex-wrap">
             <Link
-              href="#opportunities"
+              href="/opportunities"
               className="group inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-emerald-300 px-6 py-3 text-sm font-bold text-slate-950 shadow-lg shadow-emerald-950/25 transition hover:-translate-y-0.5 hover:bg-emerald-200 active:scale-[0.99] sm:w-auto"
             >
               Explore opportunities

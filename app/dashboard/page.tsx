@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { startTransition, useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
 import {
   AcademicCapIcon,
+  BookmarkIcon,
   BriefcaseIcon,
   ChartBarIcon,
   UserCircleIcon,
@@ -16,14 +17,18 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import BackgroundCanvas from "@/components/BackgroundCanvas";
 import ProfileSetupModal from "@/components/ProfileSetupModal";
+import MentorWorkspace from "@/components/MentorWorkspace";
 import ScrollReveal from "@/components/ScrollReveal";
 import { UserProfile } from "@/server/types";
 import { useApplications } from "@/context/ApplicationContext";
+import type { Opportunity } from "@/server/types/opportunity";
 
 type DashboardTab =
   | "overview"
   | "applications"
+  | "saved"
   | "mentorship"
+  | "mentor"
   | "notifications"
   | "analytics"
   | "settings";
@@ -36,7 +41,13 @@ interface MentorApplicationSummary {
 
 export default function DashboardPage() {
   const { data: session } = useSession();
-  const { appliedOpportunities, bookedSessions } = useApplications();
+  const {
+    appliedOpportunities,
+    bookedSessions,
+    savedOpportunityIds,
+    savedOpportunitiesLoading,
+    setOpportunitySaved,
+  } = useApplications();
   const { unreadCount } = useNotifications();
   const canViewAnalytics =
     session?.user?.role === "admin" || session?.user?.role === "funder";
@@ -44,6 +55,11 @@ export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState<DashboardTab>("overview");
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [profileOverride, setProfileOverride] = useState<UserProfile | null>(null);
+  const [savedOpportunities, setSavedOpportunities] = useState<Opportunity[]>([]);
+  const [savedOpportunitiesLoaded, setSavedOpportunitiesLoaded] = useState(false);
+  const [savedOpportunitiesResolvedKey, setSavedOpportunitiesResolvedKey] =
+    useState("");
+  const [savedOpportunityError, setSavedOpportunityError] = useState("");
   const [mentorApplicationResult, setMentorApplicationResult] = useState<{
     userId: string;
     application: MentorApplicationSummary | null;
@@ -55,7 +71,9 @@ export default function DashboardPage() {
     if (
       requestedTab === "overview" ||
       requestedTab === "applications" ||
+      requestedTab === "saved" ||
       requestedTab === "mentorship" ||
+      requestedTab === "mentor" ||
       requestedTab === "notifications" ||
       requestedTab === "settings" ||
       requestedTab === "analytics"
@@ -68,6 +86,68 @@ export default function DashboardPage() {
       return () => window.clearTimeout(timeout);
     }
   }, [canViewAnalytics]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadSavedOpportunities = async () => {
+      if (savedOpportunitiesLoading) return;
+      const queryKey = JSON.stringify([
+        session?.user?.id || "guest",
+        savedOpportunityIds,
+      ]);
+      if (savedOpportunityIds.length === 0) {
+        startTransition(() => {
+          setSavedOpportunities([]);
+          setSavedOpportunitiesLoaded(true);
+          setSavedOpportunitiesResolvedKey(queryKey);
+          setSavedOpportunityError("");
+        });
+        return;
+      }
+
+      startTransition(() => {
+        setSavedOpportunitiesLoaded(false);
+        setSavedOpportunityError("");
+      });
+      try {
+        const response = await fetch("/api/opportunities", { cache: "no-store" });
+        const result = await response.json();
+        if (!response.ok || !Array.isArray(result.data)) {
+          throw new Error(result.message || "Could not load saved opportunities.");
+        }
+        if (cancelled) return;
+
+        const opportunitiesById = new Map<string, Opportunity>(
+          (result.data as Opportunity[]).map((opportunity) => [
+            opportunity.id,
+            opportunity,
+          ])
+        );
+        setSavedOpportunities(
+          savedOpportunityIds
+            .map((id: string) => opportunitiesById.get(id))
+            .filter((opportunity): opportunity is Opportunity => Boolean(opportunity))
+        );
+        setSavedOpportunityError("");
+      } catch (error) {
+        if (!cancelled) {
+          console.error("Failed to load saved opportunities:", error);
+          setSavedOpportunityError("Saved opportunities could not be loaded.");
+        }
+      } finally {
+        if (!cancelled) {
+          setSavedOpportunitiesLoaded(true);
+          setSavedOpportunitiesResolvedKey(queryKey);
+        }
+      }
+    };
+
+    void loadSavedOpportunities();
+    return () => {
+      cancelled = true;
+    };
+  }, [savedOpportunityIds, savedOpportunitiesLoading, session?.user?.id]);
 
   useEffect(() => {
     const userId = session?.user?.id;
@@ -137,15 +217,35 @@ export default function DashboardPage() {
     bio:
       session?.user?.bio ||
       "",
+    careerStage: session?.user?.careerStage || "other",
+    skills: session?.user?.skills || [],
+    interests: session?.user?.interests || [],
+    experience: session?.user?.experience || "",
+    goals: session?.user?.goals || "",
+    supportNeeds: session?.user?.supportNeeds || [],
     createdAt: new Date(0),
   };
   const currentUser = profileOverride ?? sessionUser;
+  const savedOpportunityQueryKey = JSON.stringify([
+    session?.user?.id || "guest",
+    savedOpportunityIds,
+  ]);
+  const savedOpportunityViewIsCurrent =
+    !savedOpportunitiesLoading &&
+    savedOpportunitiesLoaded &&
+    savedOpportunitiesResolvedKey === savedOpportunityQueryKey;
   const profileFields = [
     currentUser.fullName,
     currentUser.email,
     currentUser.location,
     currentUser.organization,
     currentUser.bio,
+    currentUser.careerStage,
+    currentUser.skills?.join(", "),
+    currentUser.interests?.join(", "),
+    currentUser.experience,
+    currentUser.goals,
+    currentUser.supportNeeds?.join(", "),
   ];
   const profileCompleteness = Math.round(
     (profileFields.filter((value) => Boolean(value?.trim())).length /
@@ -158,6 +258,21 @@ export default function DashboardPage() {
   const upcomingSessions = bookedSessions.filter(
     (session) => session.status === "Upcoming"
   ).length;
+
+  const removeSavedOpportunity = async (opportunityId: string) => {
+    try {
+      await setOpportunitySaved(opportunityId, false);
+      setSavedOpportunities((current) =>
+        current.filter((opportunity) => opportunity.id !== opportunityId)
+      );
+      setSavedOpportunityError("");
+    } catch (error) {
+      console.error("Failed to remove saved opportunity:", error);
+      setSavedOpportunityError(
+        error instanceof Error ? error.message : "Could not remove saved opportunity."
+      );
+    }
+  };
 
   return (
     <main className="relative min-h-screen overflow-hidden bg-slate-950 text-white selection:bg-teal-500/30">
@@ -214,7 +329,7 @@ export default function DashboardPage() {
                 Edit Profile
               </button>
               <Link
-                href="/#opportunities"
+                href="/opportunities"
                 className="min-h-11 rounded-full bg-gradient-to-r from-emerald-300 to-teal-400 px-6 py-2.5 text-sm font-bold text-slate-950 shadow-lg shadow-teal-500/20 transition hover:brightness-105"
               >
                 Browse Opportunities →
@@ -232,10 +347,16 @@ export default function DashboardPage() {
                 icon: "🚀",
               },
               {
+                id: "saved",
+                label: `Saved (${savedOpportunityIds.length})`,
+                icon: "🔖",
+              },
+              {
                 id: "mentorship",
                 label: `Mentorship Sessions (${bookedSessions.length})`,
                 icon: "📅",
               },
+              { id: "mentor", label: "Mentor Workspace", icon: "🧭" },
               {
                 id: "notifications",
                 label: `Activity & Notifications${unreadCount ? ` (${unreadCount})` : ""}`,
@@ -366,6 +487,13 @@ export default function DashboardPage() {
                     <span className="rounded-full border border-teal-400/30 bg-teal-400/10 px-4 py-1.5 text-xs font-bold text-teal-300">
                       {mentorApplication.status}
                     </span>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab("mentor")}
+                      className="min-h-10 rounded-full border border-teal-300/30 px-4 text-xs font-semibold text-teal-100 transition hover:bg-teal-300/10"
+                    >
+                      Manage application →
+                    </button>
                   </div>
                 </div>
               )}
@@ -461,6 +589,54 @@ export default function DashboardPage() {
                   </div>
                 </div>
               </div>
+
+              <section className="rounded-3xl border border-white/10 bg-slate-900/60 p-6 backdrop-blur-xl">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-base font-bold text-white">Saved opportunities</h3>
+                    <p className="mt-1 text-xs text-slate-400">
+                      {savedOpportunityIds.length} saved {session?.user?.id ? "to your account" : "in this browser"}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("saved")}
+                    className="min-h-10 text-xs font-semibold text-teal-300 hover:underline"
+                  >
+                    View saved →
+                  </button>
+                </div>
+                {savedOpportunityError ? (
+                  <p role="status" className="mt-4 text-xs text-rose-200">
+                    {savedOpportunityError}
+                  </p>
+                ) : savedOpportunityViewIsCurrent && savedOpportunities.length > 0 ? (
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    {savedOpportunities.slice(0, 2).map((opportunity) => (
+                      <div
+                        key={opportunity.id}
+                        className="rounded-2xl border border-white/5 bg-white/[0.02] p-4"
+                      >
+                        <p className="text-[10px] font-semibold uppercase text-teal-300">
+                          {opportunity.category}
+                        </p>
+                        <h4 className="mt-2 text-sm font-bold text-white">
+                          {opportunity.title}
+                        </h4>
+                        <p className="mt-1 text-xs text-slate-400">
+                          {opportunity.organization}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="mt-4 text-xs text-slate-400">
+                    {savedOpportunityViewIsCurrent
+                      ? "No saved opportunities yet. Browse listings and bookmark ones to revisit."
+                      : "Loading saved opportunities…"}
+                  </p>
+                )}
+              </section>
             </div>
           )}
 
@@ -525,13 +701,78 @@ export default function DashboardPage() {
                 ) : (
                   <div className="rounded-3xl border border-dashed border-white/10 p-8 text-center text-xs text-slate-400">
                     You have not submitted any applications yet.{" "}
-                    <Link href="/#opportunities" className="text-teal-300 underline">
+                    <Link href="/opportunities" className="text-teal-300 underline">
                       Browse available opportunities
                     </Link>
                   </div>
                 )}
               </div>
             </div>
+          )}
+
+          {activeTab === "saved" && (
+            <section className="mt-8 space-y-4">
+              <div>
+                <h3 className="text-xl font-bold text-white">Saved opportunities</h3>
+                <p className="mt-1 text-xs text-slate-400">
+                  {session?.user?.id
+                    ? "These bookmarks are synced to your KIOH account."
+                    : "These bookmarks are saved in this browser."}
+                </p>
+              </div>
+              {savedOpportunityError ? (
+                <p role="status" className="rounded-xl border border-rose-300/20 bg-rose-300/5 p-4 text-xs text-rose-200">
+                  {savedOpportunityError}
+                </p>
+              ) : savedOpportunityViewIsCurrent && savedOpportunities.length > 0 ? (
+                <div className="grid gap-4">
+                  {savedOpportunities.map((opportunity) => (
+                    <article
+                      key={opportunity.id}
+                      className="flex flex-col gap-4 rounded-3xl border border-white/10 bg-slate-900/60 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6"
+                    >
+                      <div>
+                        <p className="text-[10px] font-semibold uppercase text-teal-300">
+                          {opportunity.category} · {opportunity.county}
+                        </p>
+                        <h4 className="mt-2 text-base font-bold text-white">
+                          {opportunity.title}
+                        </h4>
+                        <p className="mt-1 text-xs text-slate-400">
+                          {opportunity.organization} · Deadline {opportunity.deadline}
+                        </p>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <Link
+                          href="/opportunities"
+                          className="inline-flex min-h-11 items-center rounded-full bg-teal-300 px-4 text-xs font-bold text-slate-950 transition hover:bg-emerald-200"
+                        >
+                          View listing
+                        </Link>
+                        <button
+                          type="button"
+                          aria-label={`Remove ${opportunity.title} from saved opportunities`}
+                          disabled={savedOpportunitiesLoading}
+                          onClick={() => void removeSavedOpportunity(opportunity.id)}
+                          className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-full border border-white/10 text-slate-300 transition hover:border-rose-300/30 hover:text-rose-200 disabled:cursor-wait disabled:opacity-50"
+                        >
+                          <BookmarkIcon aria-hidden="true" className="h-5 w-5" />
+                        </button>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-3xl border border-dashed border-white/10 p-8 text-center text-xs text-slate-400">
+                  {savedOpportunityViewIsCurrent
+                    ? "No saved opportunities found in this browser."
+                    : "Loading saved opportunities…"}{" "}
+                  <Link href="/opportunities" className="text-teal-300 underline">
+                    Browse opportunities
+                  </Link>
+                </div>
+              )}
+            </section>
           )}
 
           {/* TAB 3: MENTORSHIP */}
@@ -583,6 +824,9 @@ export default function DashboardPage() {
           )}
 
           {activeTab === "notifications" && <NotificationActivity />}
+          {activeTab === "mentor" && (
+            <MentorWorkspace key={session?.user?.id ?? "guest"} />
+          )}
           {activeTab === "analytics" && canViewAnalytics && (
             <EcosystemAnalytics />
           )}
@@ -633,8 +877,50 @@ export default function DashboardPage() {
                   <label className="block font-bold text-slate-400 uppercase tracking-wider text-[10px]">
                     Bio
                   </label>
-                  <p className="mt-1 text-xs text-slate-300 leading-relaxed">
+                  <p className="mt-1 text-xs text-slate-200 leading-relaxed">
                     {currentUser.bio}
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-400 uppercase tracking-wider text-[10px]">
+                    Career stage
+                  </label>
+                  <p className="mt-1 text-sm font-semibold capitalize text-white">
+                    {currentUser.careerStage || "Not set"}
+                  </p>
+                </div>
+
+                {[
+                  ["Skills", currentUser.skills],
+                  ["Interests", currentUser.interests],
+                  ["Support sought", currentUser.supportNeeds],
+                ].map(([label, values]) => (
+                  <div key={label as string}>
+                    <label className="block font-bold text-slate-400 uppercase tracking-wider text-[10px]">
+                      {label}
+                    </label>
+                    <p className="mt-1 text-sm font-semibold text-white">
+                      {(values as string[] | undefined)?.join(", ") || "Not set"}
+                    </p>
+                  </div>
+                ))}
+
+                <div>
+                  <label className="block font-bold text-slate-400 uppercase tracking-wider text-[10px]">
+                    Goals
+                  </label>
+                  <p className="mt-1 text-xs leading-relaxed text-slate-200">
+                    {currentUser.goals || "Not set"}
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-400 uppercase tracking-wider text-[10px]">
+                    Experience
+                  </label>
+                  <p className="mt-1 text-xs leading-relaxed text-slate-200">
+                    {currentUser.experience || "Not set"}
                   </p>
                 </div>
 

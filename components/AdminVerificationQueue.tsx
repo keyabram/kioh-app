@@ -18,6 +18,9 @@ interface MentorApplication {
   specialties: string[];
   bio: string;
   linkedinUrl: string;
+  websiteUrl: string | null;
+  githubUrl: string | null;
+  xUrl: string | null;
   availableDays: string[];
   createdAt: string;
   certificates: { key: string; name: string }[];
@@ -233,14 +236,26 @@ export default function AdminVerificationQueue() {
                             ))}
                           </ul>
                           <div className="mt-4 flex flex-wrap gap-3 text-xs">
-                            <a
-                              href={application.linkedinUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="font-semibold text-teal-200 underline underline-offset-4"
-                            >
-                              LinkedIn / profile
-                            </a>
+                            {(
+                              [
+                                ["LinkedIn", application.linkedinUrl],
+                                ["Website", application.websiteUrl],
+                                ["GitHub", application.githubUrl],
+                                ["X / Twitter", application.xUrl],
+                              ] as const
+                            ).map(([label, href]) =>
+                              href ? (
+                                <a
+                                  key={label}
+                                  href={href}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="font-semibold text-teal-200 underline underline-offset-4"
+                                >
+                                  {label}
+                                </a>
+                              ) : null
+                            )}
                             {application.certificates.map((certificate) => (
                               <a
                                 key={certificate.key}

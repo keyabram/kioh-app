@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { startTransition, useCallback, useEffect, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
   ArrowRightIcon,
@@ -30,7 +30,7 @@ const roleOptions: { id: RoleType; label: string }[] = [
 const interestLabels: Record<RoleType, string> = {
   builder: "What are you looking to build or learn?",
   mentor: "Which areas can you mentor in?",
-  donor: "What impact would you like to support?",
+  donor: "What kind of program or impact would you like to fund?",
   partner: "What would a partnership with KIOH look like?",
 };
 
@@ -65,6 +65,7 @@ export default function JoinModal({
   useEffect(() => {
     if (!isOpen) return;
 
+    startTransition(() => setSelectedRole(defaultRole));
     const previousOverflow = document.body.style.overflow;
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") close();
@@ -143,7 +144,7 @@ export default function JoinModal({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={reduceMotion ? undefined : { opacity: 0, y: 20, scale: 0.98 }}
             transition={{ duration: 0.22 }}
-            className="relative max-h-[94dvh] w-full max-w-xl overflow-y-auto rounded-t-3xl border border-white/15 bg-slate-900 p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl sm:rounded-3xl sm:p-8"
+            className="relative flex max-h-[92dvh] w-full max-w-xl flex-col overflow-hidden rounded-t-3xl border border-white/15 bg-slate-900 p-5 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl sm:max-h-[min(90dvh,800px)] sm:rounded-3xl sm:p-8"
           >
             <button
               type="button"
@@ -155,7 +156,7 @@ export default function JoinModal({
             </button>
 
             {submitted ? (
-              <div className="py-8 text-center">
+              <div className="my-auto overflow-y-auto py-8 text-center">
                 <CheckCircleIcon className="mx-auto h-14 w-14 text-emerald-400" />
                 <h3 id="join-dialog-title" className="mt-5 text-2xl font-bold text-white">
                   Enquiry received
@@ -173,38 +174,57 @@ export default function JoinModal({
               </div>
             ) : (
               <>
-                <div className="pr-10">
+                <div className="shrink-0 border-b border-white/10 pb-4 pr-10">
                   <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-300">
-                    Build a stronger innovation ecosystem
+                    {selectedRole === "donor"
+                      ? "Funding conversations"
+                      : "Build a stronger innovation ecosystem"}
                   </p>
                   <h3 id="join-dialog-title" className="mt-2 text-2xl font-bold tracking-tight text-white sm:text-3xl">
-                    Start a conversation.
+                    {selectedRole === "donor"
+                      ? "Discuss a funding program"
+                      : selectedRole === "mentor"
+                      ? "Explore mentorship"
+                      : selectedRole === "partner"
+                      ? "Start a partnership"
+                      : "Start a conversation."}
                   </h3>
                   <p className="mt-2 text-sm leading-6 text-slate-400">
-                    Tell us what you care about. We’ll use your details to follow up on this enquiry.
+                    {selectedRole === "donor"
+                      ? "Share who you want to support, the outcomes you care about, and any funding priorities."
+                      : "Tell us what you care about. We’ll use your details to follow up on this enquiry."}
                   </p>
                 </div>
 
-                <div className="mt-6 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                  {roleOptions.map((option) => (
-                    <button
-                      key={option.id}
-                      type="button"
-                      aria-pressed={selectedRole === option.id}
-                      onClick={() => setSelectedRole(option.id)}
-                      className={`min-h-11 rounded-xl border px-3 py-2 text-sm font-semibold transition active:scale-[0.98] ${
-                        selectedRole === option.id
-                          ? "border-emerald-300/50 bg-emerald-300/10 text-emerald-200"
-                          : "border-white/10 bg-white/[0.03] text-slate-300 hover:bg-white/[0.07]"
-                      }`}
-                    >
-                      {option.label}
-                    </button>
-                  ))}
-                </div>
+                {defaultRole === "builder" && (
+                  <div className="mt-4 grid shrink-0 grid-cols-2 gap-2 sm:grid-cols-4">
+                    {roleOptions.map((option) => (
+                      <button
+                        key={option.id}
+                        type="button"
+                        aria-pressed={selectedRole === option.id}
+                        onClick={() => setSelectedRole(option.id)}
+                        className={`min-h-11 rounded-xl border px-3 py-2 text-sm font-semibold transition active:scale-[0.98] ${
+                          selectedRole === option.id
+                            ? "border-emerald-300/50 bg-emerald-300/10 text-emerald-200"
+                            : "border-white/10 bg-white/[0.03] text-slate-300 hover:bg-white/[0.07]"
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
 
-                {selectedRole === "partner" && (
-                      <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border border-emerald-200/15 bg-emerald-200/[0.04] p-3.5">
+                <form onSubmit={handleSubmit} className="mt-4 flex min-h-0 flex-1 flex-col">
+                  <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain pr-1">
+                    {error && (
+                      <p role="alert" className="rounded-xl border border-rose-400/25 bg-rose-400/10 p-3 text-sm text-rose-200">
+                        {error}
+                      </p>
+                    )}
+                    {selectedRole === "partner" && (
+                      <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-emerald-200/15 bg-emerald-200/[0.04] p-3.5">
                         <input
                           type="checkbox"
                           checked={formData.publicOrganizationConsent}
@@ -220,15 +240,7 @@ export default function JoinModal({
                           If approved, KIOH may display my organization’s name with a verified partner badge.
                         </span>
                       </label>
-                )}
-
-                {error && (
-                  <p role="alert" className="mt-4 rounded-xl border border-rose-400/25 bg-rose-400/10 p-3 text-sm text-rose-200">
-                    {error}
-                  </p>
-                )}
-
-                <form onSubmit={handleSubmit} className="mt-5 space-y-4">
+                    )}
                   <label className="block">
                     <span className="text-xs font-semibold text-slate-300">Full name</span>
                     <span className="relative mt-1.5 block">
@@ -309,25 +321,35 @@ export default function JoinModal({
                       required
                       minLength={10}
                       maxLength={2000}
-                      rows={4}
+                      rows={selectedRole === "donor" ? 5 : 4}
                       value={formData.interest}
                       onChange={(event) => setFormData({ ...formData, interest: event.target.value })}
-                      placeholder="A few sentences is enough to get started..."
+                      placeholder={
+                        selectedRole === "donor"
+                          ? "Describe the people or communities you want to reach, the outcomes you hope to fund, and any priorities or timeline..."
+                          : "A few sentences is enough to get started..."
+                      }
                       className="mt-1.5 w-full resize-y rounded-xl border border-white/10 bg-white/[0.03] px-3.5 py-3 text-sm leading-6 text-white placeholder-slate-500 focus:border-emerald-300 focus:outline-none"
                     />
                   </label>
-
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-300 to-teal-400 px-5 py-3 text-sm font-bold text-slate-950 shadow-lg shadow-emerald-900/20 transition hover:brightness-105 disabled:cursor-wait disabled:opacity-60"
-                  >
-                    {loading ? "Sending your enquiry…" : "Send enquiry"}
-                    {!loading && <ArrowRightIcon className="h-4 w-4" />}
-                  </button>
-                  <p className="text-center text-[11px] leading-5 text-slate-500">
-                    Your information is used only to follow up on this KIOH enquiry.
-                  </p>
+                  </div>
+                  <div className="mt-4 shrink-0 border-t border-white/10 bg-slate-900 pt-4">
+                    <button
+                      type="submit"
+                      disabled={loading}
+                      className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-300 to-teal-400 px-5 py-3 text-sm font-bold text-slate-950 shadow-lg shadow-emerald-900/20 transition hover:brightness-105 disabled:cursor-wait disabled:opacity-60"
+                    >
+                      {loading
+                        ? "Sending your enquiry…"
+                        : selectedRole === "donor"
+                        ? "Send funding enquiry"
+                        : "Send enquiry"}
+                      {!loading && <ArrowRightIcon className="h-4 w-4" />}
+                    </button>
+                    <p className="mt-2 text-center text-[11px] leading-5 text-slate-500">
+                      Your information is used only to follow up on this KIOH enquiry.
+                    </p>
+                  </div>
                 </form>
               </>
             )}

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
-import { UserProfile, UserRole } from "@/server/types";
+import { CareerStage, UserProfile, UserRole } from "@/server/types";
 
 interface ProfileSetupProps {
   user: UserProfile;
@@ -21,6 +21,18 @@ export default function ProfileSetupModal({
   const [location, setLocation] = useState(user.location || "");
   const [organization, setOrganization] = useState(user.organization || "");
   const [bio, setBio] = useState(user.bio || "");
+  const [careerStage, setCareerStage] = useState<CareerStage>(
+    user.careerStage || "other"
+  );
+  const [skillsText, setSkillsText] = useState(user.skills?.join(", ") || "");
+  const [interestsText, setInterestsText] = useState(
+    user.interests?.join(", ") || ""
+  );
+  const [experience, setExperience] = useState(user.experience || "");
+  const [goals, setGoals] = useState(user.goals || "");
+  const [supportNeedsText, setSupportNeedsText] = useState(
+    user.supportNeeds?.join(", ") || ""
+  );
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const reduceMotion = useReducedMotion();
@@ -58,6 +70,12 @@ export default function ProfileSetupModal({
           location,
           organization,
           bio,
+          careerStage,
+          skills: skillsText.split(",").map((item) => item.trim()).filter(Boolean),
+          interests: interestsText.split(",").map((item) => item.trim()).filter(Boolean),
+          experience,
+          goals,
+          supportNeeds: supportNeedsText.split(",").map((item) => item.trim()).filter(Boolean),
         }),
       });
       const result = await response.json();
@@ -187,6 +205,89 @@ export default function ProfileSetupModal({
               onChange={(e) => setBio(e.target.value)}
               placeholder="Describe what you are building or learning (e.g. Full-Stack Web, AgriTech, FinTech)..."
               className="mt-1 w-full rounded-xl border border-white/10 bg-white/[0.03] px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:border-teal-400 focus:outline-none"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="career-stage" className="block text-xs font-medium text-slate-300">
+              Current stage
+            </label>
+            <select
+              id="career-stage"
+              value={careerStage}
+              onChange={(event) => setCareerStage(event.target.value as CareerStage)}
+              className="mt-1 w-full rounded-xl border border-white/10 bg-slate-900 px-3.5 py-2.5 text-sm text-white focus:border-teal-400 focus:outline-none"
+            >
+              <option value="student">Student or young person</option>
+              <option value="graduate">Graduate or skilled job seeker</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+
+          <div>
+            <label htmlFor="profile-skills" className="block text-xs font-medium text-slate-300">
+              Skills
+            </label>
+            <input
+              id="profile-skills"
+              value={skillsText}
+              onChange={(event) => setSkillsText(event.target.value)}
+              placeholder="e.g. data analysis, design, project management"
+              className="mt-1 w-full rounded-xl border border-white/10 bg-white/[0.03] px-3.5 py-2.5 text-sm text-white placeholder-slate-500 focus:border-teal-400 focus:outline-none"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="profile-interests" className="block text-xs font-medium text-slate-300">
+              Areas of interest
+            </label>
+            <input
+              id="profile-interests"
+              value={interestsText}
+              onChange={(event) => setInterestsText(event.target.value)}
+              placeholder="e.g. climate, health, technology, agriculture"
+              className="mt-1 w-full rounded-xl border border-white/10 bg-white/[0.03] px-3.5 py-2.5 text-sm text-white placeholder-slate-500 focus:border-teal-400 focus:outline-none"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="profile-experience" className="block text-xs font-medium text-slate-300">
+              Experience so far
+            </label>
+            <textarea
+              id="profile-experience"
+              rows={2}
+              value={experience}
+              onChange={(event) => setExperience(event.target.value)}
+              placeholder="Work, volunteering, projects, research, or practical experience"
+              className="mt-1 w-full rounded-xl border border-white/10 bg-white/[0.03] px-3.5 py-2.5 text-sm text-white placeholder-slate-500 focus:border-teal-400 focus:outline-none"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="profile-goals" className="block text-xs font-medium text-slate-300">
+              What are you working toward?
+            </label>
+            <textarea
+              id="profile-goals"
+              rows={2}
+              value={goals}
+              onChange={(event) => setGoals(event.target.value)}
+              placeholder="Describe the opportunity or outcome you want next"
+              className="mt-1 w-full rounded-xl border border-white/10 bg-white/[0.03] px-3.5 py-2.5 text-sm text-white placeholder-slate-500 focus:border-teal-400 focus:outline-none"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="profile-support" className="block text-xs font-medium text-slate-300">
+              Support you are looking for
+            </label>
+            <input
+              id="profile-support"
+              value={supportNeedsText}
+              onChange={(event) => setSupportNeedsText(event.target.value)}
+              placeholder="e.g. mentorship, funding, training, collaborators"
+              className="mt-1 w-full rounded-xl border border-white/10 bg-white/[0.03] px-3.5 py-2.5 text-sm text-white placeholder-slate-500 focus:border-teal-400 focus:outline-none"
             />
           </div>
 

@@ -145,8 +145,13 @@ export async function GET() {
   } catch (error) {
     console.error("[OPPORTUNITIES_GET_ERROR]:", error);
     return NextResponse.json(
-      { success: false, message: "Failed to load opportunities." },
-      { status: 500 }
+      {
+        success: true,
+        data: SAMPLE_OPPORTUNITIES,
+        checkedAt: new Date().toISOString(),
+        fallback: true,
+      },
+      { headers: { "Cache-Control": "no-store, max-age=0" } }
     );
   }
 }

@@ -54,6 +54,12 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           location: user.location,
           organization: user.organization,
           bio: user.bio,
+          careerStage: user.careerStage,
+          skills: user.skills || [],
+          interests: user.interests || [],
+          experience: user.experience,
+          goals: user.goals,
+          supportNeeds: user.supportNeeds || [],
           navigatorVerified: Boolean(user.navigatorVerifiedAt),
         };
       },
@@ -78,6 +84,12 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
               location: null,
               organization: null,
               bio: null,
+              careerStage: null,
+              skills: [],
+              interests: [],
+              experience: null,
+              goals: null,
+              supportNeeds: [],
               createdAt: new Date(),
             },
           },
@@ -92,6 +104,12 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           token.location = storedUser.location;
           token.organization = storedUser.organization;
           token.bio = storedUser.bio;
+          token.careerStage = storedUser.careerStage;
+          token.skills = storedUser.skills || [];
+          token.interests = storedUser.interests || [];
+          token.experience = storedUser.experience;
+          token.goals = storedUser.goals;
+          token.supportNeeds = storedUser.supportNeeds || [];
           token.navigatorVerified = Boolean(storedUser.navigatorVerifiedAt);
         }
       } else if (user) {
@@ -100,6 +118,12 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         token.location = user.location ?? null;
         token.organization = user.organization ?? null;
         token.bio = user.bio ?? null;
+        token.careerStage = user.careerStage ?? null;
+        token.skills = user.skills ?? [];
+        token.interests = user.interests ?? [];
+        token.experience = user.experience ?? null;
+        token.goals = user.goals ?? null;
+        token.supportNeeds = user.supportNeeds ?? [];
         token.navigatorVerified = Boolean(user.navigatorVerified);
       } else if (token.sub) {
         const db = await getDb();
@@ -111,6 +135,12 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           token.location = storedUser.location;
           token.organization = storedUser.organization;
           token.bio = storedUser.bio;
+          token.careerStage = storedUser.careerStage;
+          token.skills = storedUser.skills || [];
+          token.interests = storedUser.interests || [];
+          token.experience = storedUser.experience;
+          token.goals = storedUser.goals;
+          token.supportNeeds = storedUser.supportNeeds || [];
           token.navigatorVerified = Boolean(storedUser.navigatorVerifiedAt);
         }
       }
@@ -126,6 +156,23 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         session.user.organization =
           typeof token.organization === "string" ? token.organization : null;
         session.user.bio = typeof token.bio === "string" ? token.bio : null;
+        session.user.careerStage =
+          token.careerStage === "student" ||
+          token.careerStage === "graduate" ||
+          token.careerStage === "other"
+            ? token.careerStage
+            : null;
+        session.user.skills = Array.isArray(token.skills) ? token.skills : [];
+        session.user.interests = Array.isArray(token.interests)
+          ? token.interests
+          : [];
+        session.user.experience =
+          typeof token.experience === "string" ? token.experience : null;
+        session.user.goals =
+          typeof token.goals === "string" ? token.goals : null;
+        session.user.supportNeeds = Array.isArray(token.supportNeeds)
+          ? token.supportNeeds
+          : [];
         session.user.navigatorVerified = token.navigatorVerified === true;
       }
       return session;

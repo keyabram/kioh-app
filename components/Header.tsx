@@ -14,6 +14,7 @@ interface HeaderProps {
   onLoginSuccess: (user: UserProfile) => void;
   onLogout: () => void;
   onOpenProfile: () => void;
+  onContactOpen?: () => void;
   authOpen?: boolean;
   onAuthOpenChange?: (open: boolean) => void;
   redirectOnLogin?: string;
@@ -24,6 +25,7 @@ export default function Header({
   onLoginSuccess,
   onLogout,
   onOpenProfile,
+  onContactOpen,
   authOpen: controlledAuthOpen,
   onAuthOpenChange,
   redirectOnLogin = "/dashboard",
@@ -93,7 +95,7 @@ export default function Header({
             <Link href="/#identity" className="text-sm text-slate-300 transition hover:text-emerald-200">
               About Us
             </Link>
-            <Link href="/#opportunities" className="text-sm text-slate-300 transition hover:text-emerald-200">
+            <Link href="/opportunities" className="text-sm text-slate-300 transition hover:text-emerald-200">
               Scholarships & Funding
             </Link>
             <Link href="/showcase" className="text-sm text-slate-300 transition hover:text-emerald-200">
@@ -108,9 +110,23 @@ export default function Header({
             <Link href="/#journey" className="text-sm text-slate-300 transition hover:text-emerald-200">
               Roadmap 2045
             </Link>
+            <button
+              type="button"
+              onClick={onContactOpen}
+              className="text-sm text-slate-300 transition hover:text-emerald-200"
+            >
+              Contact Us
+            </button>
           </div>
 
           <div className="ml-auto flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onContactOpen}
+              className="hidden rounded-full border border-emerald-300/25 bg-emerald-300/10 px-4 py-2.5 text-xs font-bold text-emerald-100 transition hover:bg-emerald-300 hover:text-slate-950 sm:inline-flex"
+            >
+              Contact Us
+            </button>
             <Link
               href="/apply-mentor"
               className="hidden rounded-full border border-emerald-300/25 bg-emerald-300/10 px-4 py-2.5 text-xs font-bold text-emerald-100 transition hover:bg-emerald-300 hover:text-slate-950 sm:inline-flex"
@@ -210,22 +226,41 @@ export default function Header({
             <div className="grid w-full grid-cols-2 gap-2 border-t border-white/10 pt-3 lg:hidden">
               {[
                 ["About Us", "/#identity"],
-                ["Scholarships & Funding", "/#opportunities"],
+                ["Scholarships & Funding", "/opportunities"],
                 ["Venture showcase", "/showcase"],
                 ["Mentorship", "/#mentorship"],
                 ["Partners & Donors", "/#stakeholders"],
                 ["Roadmap 2045", "/#journey"],
+                ["Contact Us", "contact"],
                 ["Become a Mentor", "/apply-mentor"],
-              ].map(([label, href]) => (
-                <Link
-                  key={href}
-                  href={href}
-                  onClick={() => setIsMobileNavOpen(false)}
-                  className="flex min-h-11 items-center rounded-xl px-3 text-sm text-slate-300 transition hover:bg-white/5 hover:text-emerald-100"
-                >
-                  {label}
-                </Link>
-              ))}
+              ].map(([label, href]) => {
+                if (href === "contact") {
+                  return (
+                    <button
+                      key={label}
+                      type="button"
+                      onClick={() => {
+                        setIsMobileNavOpen(false);
+                        onContactOpen?.();
+                      }}
+                      className="flex min-h-11 items-center rounded-xl px-3 text-left text-sm text-slate-300 transition hover:bg-white/5 hover:text-emerald-100"
+                    >
+                      {label}
+                    </button>
+                  );
+                }
+
+                return (
+                  <Link
+                    key={href}
+                    href={href}
+                    onClick={() => setIsMobileNavOpen(false)}
+                    className="flex min-h-11 items-center rounded-xl px-3 text-sm text-slate-300 transition hover:bg-white/5 hover:text-emerald-100"
+                  >
+                    {label}
+                  </Link>
+                );
+              })}
             </div>
           )}
         </nav>

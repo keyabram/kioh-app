@@ -2,13 +2,15 @@
 
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { useSession } from "next-auth/react";
 import { CheckBadgeIcon } from "@heroicons/react/24/solid";
 import { Mentor } from "@/server/types/mentor";
-import { SAMPLE_MENTORS } from "@/server/data/mentors";
 import { useApplications } from "@/context/ApplicationContext";
+import AuthModal from "@/components/AuthModal";
 
 export default function MentorshipSection() {
   const { bookMentorSession } = useApplications();
+  const { data: session } = useSession();
   const reduceMotion = useReducedMotion();
 
   const [selectedSpecialty, setSelectedSpecialty] = useState<string>("All");
@@ -56,6 +58,8 @@ export default function MentorshipSection() {
   const [isBooked, setIsBooked] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [scheduledSessionAt, setScheduledSessionAt] = useState("");
+  const [bookingError, setBookingError] = useState("");
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
 
   const resetModalState = useCallback(() => {
     setSelectedMentor(null);
@@ -64,6 +68,7 @@ export default function MentorshipSection() {
     setTopicNote("");
     setIsBooked(false);
     setScheduledSessionAt("");
+    setBookingError("");
   }, []);
 
   useEffect(() => {
@@ -82,10 +87,7 @@ export default function MentorshipSection() {
     };
   }, [selectedMentor, resetModalState]);
 
-  const mentors = useMemo(
-    () => [...SAMPLE_MENTORS, ...approvedMentors],
-    [approvedMentors]
-  );
+  const mentors = approvedMentors;
 
   // Extract all unique specialties
   const allSpecialties = useMemo(() => {
@@ -109,25 +111,36 @@ export default function MentorshipSection() {
     });
   }, [mentors, selectedSpecialty, searchQuery]);
 
-  const handleBookingSubmit = (e: React.FormEvent) => {
+  const handleBookingSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedMentor || !selectedDay || !selectedTimeSlot) return;
+    setBookingError("");
+    if (!session?.user?.id) {
+      setBookingError("Sign in to book a session with this mentor.");
+      setIsAuthModalOpen(true);
+      return;
+    }
 
     setIsSubmitting(true);
-
-    setTimeout(() => {
-      // Persist booked session in ApplicationContext & LocalStorage
+    try {
       const bookedSession = bookMentorSession(
         selectedMentor,
         selectedDay,
         selectedTimeSlot,
         topicNote
       );
-      setScheduledSessionAt(bookedSession.scheduledAt ?? "");
-
-      setIsSubmitting(false);
+      const savedSession = await bookedSession;
+      setScheduledSessionAt(savedSession.scheduledAt ?? "");
       setIsBooked(true);
-    }, 600);
+    } catch (error) {
+      setBookingError(
+        error instanceof Error
+          ? error.message
+          : "Could not book this session. Please try again."
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -174,7 +187,7 @@ export default function MentorshipSection() {
                 className={`min-h-11 shrink-0 snap-start rounded-xl px-3 py-1.5 text-xs font-semibold transition ${
                   selectedSpecialty === spec
                     ? "bg-teal-400 text-slate-950 shadow-md shadow-teal-500/20"
-                    : "border border-white/10 bg-white/5 text-slate-400 hover:text-white"
+                    : "border border-white/10 bg-white/5 text-slate-300 hover:text-white"
                 }`}
               >
                 {spec}
@@ -226,6 +239,31 @@ export default function MentorshipSection() {
                     </div>
                     <p className="text-xs font-medium text-teal-300">{m.title}</p>
                     <p className="text-[11px] text-slate-400">{m.organization} • 📍 {m.county}</p>
+                    {(m.linkedinUrl || m.websiteUrl || m.githubUrl || m.xUrl) && (
+                      <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px]">
+                        {(
+                          [
+                            ["LinkedIn", m.linkedinUrl],
+                            ["Website", m.websiteUrl],
+                            ["GitHub", m.githubUrl],
+                            ["X / Twitter", m.xUrl],
+                          ] as const
+                        ).map(([label, href]) =>
+                          href ? (
+                            <a
+                              key={label}
+                              href={href}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(event) => event.stopPropagation()}
+                              className="font-semibold text-teal-200 underline underline-offset-4 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-300"
+                            >
+                              {label}
+                            </a>
+                          ) : null
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -255,16 +293,27 @@ export default function MentorshipSection() {
                   </span>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSelectedMentor(m);
-                    setSelectedDay(m.availableDays[0] || "");
-                  }}
-                  className="min-h-11 shrink-0 rounded-full bg-gradient-to-r from-emerald-300 to-teal-400 px-5 py-2 text-xs font-bold text-slate-950 shadow-lg shadow-teal-500/20 transition hover:brightness-105"
-                >
-                  Book Session →
-                </button>
+                {m.isBookable ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedMentor(m);
+                      setSelectedDay(m.availableDays[0] || "");
+                      setSelectedTimeSlot("");
+                      setTopicNote("");
+                      setBookingError("");
+                      setIsBooked(false);
+                      setScheduledSessionAt("");
+                    }}
+                    className="min-h-11 shrink-0 rounded-full bg-gradient-to-r from-emerald-300 to-teal-400 px-5 py-2 text-xs font-bold text-slate-950 shadow-lg shadow-teal-500/20 transition hover:brightness-105"
+                  >
+                    Book Session →
+                  </button>
+                ) : (
+                  <span className="shrink-0 rounded-full border border-white/15 px-3 py-2 text-[11px] font-semibold text-slate-300">
+                    Directory preview
+                  </span>
+                )}
               </div>
             </motion.article>
           ))}
@@ -352,6 +401,11 @@ export default function MentorshipSection() {
                 </div>
 
                 <div className="mt-6 space-y-4">
+                  {bookingError && (
+                    <p role="alert" className="rounded-xl border border-rose-300/25 bg-rose-300/10 p-3 text-xs text-rose-100">
+                      {bookingError}
+                    </p>
+                  )}
                   {/* Select Day */}
                   <div>
                     <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400">
@@ -366,7 +420,7 @@ export default function MentorshipSection() {
                           className={`min-h-11 shrink-0 rounded-xl border px-4 py-2 text-xs font-bold transition ${
                             selectedDay === day
                               ? "border-teal-400 bg-teal-400/10 text-white"
-                              : "border-white/10 bg-white/5 text-slate-400"
+                              : "border-white/10 bg-white/5 text-slate-300"
                           }`}
                         >
                           {day}
@@ -389,7 +443,7 @@ export default function MentorshipSection() {
                           className={`min-h-11 rounded-xl border p-2 text-center text-xs font-semibold transition ${
                             selectedTimeSlot === time
                               ? "border-teal-400 bg-teal-400/10 text-teal-300"
-                              : "border-white/10 bg-white/5 text-slate-400"
+                              : "border-white/10 bg-white/5 text-slate-300"
                           }`}
                         >
                           {time}
@@ -427,6 +481,12 @@ export default function MentorshipSection() {
         </motion.div>
       )}
       </AnimatePresence>
+
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        redirectTo="/#mentorship"
+      />
     </section>
   );
 }

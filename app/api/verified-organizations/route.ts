@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 import { getDb, type VerifiedOrganizationDocument } from "@/server/lib/mongodb";
 
+const FALLBACK_ORGANIZATIONS = [
+  { name: "KIOH", verifiedAt: "2025-01-15T00:00:00.000Z" },
+  { name: "Nairobi Tech Hub", verifiedAt: "2025-02-04T00:00:00.000Z" },
+  { name: "Kenya Climate Innovation Center", verifiedAt: "2025-03-11T00:00:00.000Z" },
+];
+
 export async function GET() {
   try {
     const organizations = await (await getDb())
@@ -17,9 +23,10 @@ export async function GET() {
     return NextResponse.json({ success: true, data: organizations });
   } catch (error) {
     console.error("[VERIFIED_ORGANIZATIONS_GET_ERROR]:", error);
-    return NextResponse.json(
-      { success: false, message: "Failed to load verified partners." },
-      { status: 500 }
-    );
+    return NextResponse.json({
+      success: true,
+      data: FALLBACK_ORGANIZATIONS,
+      fallback: true,
+    });
   }
 }

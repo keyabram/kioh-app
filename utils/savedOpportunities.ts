@@ -1,0 +1,1 @@
+export const SAVED_OPPORTUNITIES_KEY = "kioh_saved_opportunities";

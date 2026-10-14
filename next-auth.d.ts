@@ -1,5 +1,5 @@
 import type { DefaultSession } from "next-auth";
-import type { UserRole } from "@/server/types";
+import type { CareerStage, UserRole } from "@/server/types";
 
 declare module "next-auth" {
   interface Session {
@@ -9,6 +9,12 @@ declare module "next-auth" {
       location: string | null;
       organization: string | null;
       bio: string | null;
+      careerStage: CareerStage | null;
+      skills: string[];
+      interests: string[];
+      experience: string | null;
+      goals: string | null;
+      supportNeeds: string[];
       navigatorVerified: boolean;
     } & DefaultSession["user"];
   }
@@ -18,6 +24,12 @@ declare module "next-auth" {
     location?: string | null;
     organization?: string | null;
     bio?: string | null;
+    careerStage?: CareerStage | null;
+    skills?: string[];
+    interests?: string[];
+    experience?: string | null;
+    goals?: string | null;
+    supportNeeds?: string[];
     navigatorVerified?: boolean;
   }
 }
@@ -28,6 +40,12 @@ declare module "next-auth/jwt" {
     location?: string | null;
     organization?: string | null;
     bio?: string | null;
+    careerStage?: CareerStage | null;
+    skills?: string[];
+    interests?: string[];
+    experience?: string | null;
+    goals?: string | null;
+    supportNeeds?: string[];
     navigatorVerified?: boolean;
   }
 }

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { getDb, type UserDocument } from "@/server/lib/mongodb";
-import type { UserRole } from "@/server/types";
+import type { CareerStage, UserRole } from "@/server/types";
 
 const USER_ROLES: UserRole[] = [
   "participant",
@@ -9,6 +9,19 @@ const USER_ROLES: UserRole[] = [
   "mentor",
   "funder",
 ];
+const CAREER_STAGES: CareerStage[] = ["student", "graduate", "other"];
+
+function parseTextList(value: unknown): string[] | null {
+  if (!Array.isArray(value) || value.length > 30) return null;
+  if (
+    !value.every(
+      (entry) => typeof entry === "string" && entry.trim().length <= 100
+    )
+  ) {
+    return null;
+  }
+  return [...new Set(value.map((entry: string) => entry.trim()).filter(Boolean))];
+}
 
 function toUserProfile(user: UserDocument) {
   return {
@@ -21,6 +34,12 @@ function toUserProfile(user: UserDocument) {
     location: user.location || "",
     organization: user.organization || "",
     bio: user.bio || "",
+    careerStage: user.careerStage || "other",
+    skills: user.skills || [],
+    interests: user.interests || [],
+    experience: user.experience || "",
+    goals: user.goals || "",
+    supportNeeds: user.supportNeeds || [],
     createdAt: user.createdAt,
   };
 }
@@ -72,10 +91,25 @@ export async function PUT(request: Request) {
       !USER_ROLES.includes(body.role as UserRole) ||
       typeof body.location !== "string" ||
       typeof body.organization !== "string" ||
-      typeof body.bio !== "string"
+      typeof body.bio !== "string" ||
+      !CAREER_STAGES.includes(body.careerStage as CareerStage) ||
+      typeof body.experience !== "string" ||
+      body.experience.length > 2000 ||
+      typeof body.goals !== "string" ||
+      body.goals.length > 2000
     ) {
       return NextResponse.json(
         { success: false, message: "Invalid profile data." },
+        { status: 400 }
+      );
+    }
+
+    const skills = parseTextList(body.skills);
+    const interests = parseTextList(body.interests);
+    const supportNeeds = parseTextList(body.supportNeeds);
+    if (!skills || !interests || !supportNeeds) {
+      return NextResponse.json(
+        { success: false, message: "Invalid profile lists." },
         { status: 400 }
       );
     }
@@ -89,6 +123,12 @@ export async function PUT(request: Request) {
           location: body.location.trim(),
           organization: body.organization.trim(),
           bio: body.bio.trim(),
+          careerStage: body.careerStage,
+          skills,
+          interests,
+          experience: body.experience.trim(),
+          goals: body.goals.trim(),
+          supportNeeds,
           updatedAt: new Date(),
         },
       },

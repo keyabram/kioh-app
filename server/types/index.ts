@@ -45,6 +45,7 @@ export interface RoadmapMilestone {
   details: string[];
 }
 export type UserRole = "participant" | "navigator" | "mentor" | "funder" | "admin";
+export type CareerStage = "student" | "graduate" | "other";
 
 export interface UserProfile {
   id: string;
@@ -56,6 +57,11 @@ export interface UserProfile {
   bio?: string;
   location?: string;
   skills?: string[];
+  interests?: string[];
+  careerStage?: CareerStage;
+  experience?: string;
+  goals?: string;
+  supportNeeds?: string[];
   organization?: string;
   navigatorVerified?: boolean;
   createdAt: Date;

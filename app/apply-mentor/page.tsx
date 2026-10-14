@@ -11,6 +11,10 @@ import { KENYA_COUNTIES } from "@/server/data/opportunities";
 import type { UserProfile } from "@/server/types";
 import DocumentUploadField from "@/components/DocumentUploadField";
 import type { UploadedDocument } from "@/server/types/uploads";
+import {
+  getMentorSocialUrlError,
+  normalizeMentorSocialUrl,
+} from "@/utils/mentorSocialUrls";
 
 const DOMAIN_OPTIONS = [
   "AgriTech",
@@ -39,6 +43,15 @@ export default function ApplyMentorPage() {
   const [selectedSpecialties, setSelectedSpecialties] = useState<string[]>([]);
   const [bio, setBio] = useState("");
   const [linkedinUrl, setLinkedinUrl] = useState("");
+  const [websiteUrl, setWebsiteUrl] = useState("");
+  const [githubUrl, setGithubUrl] = useState("");
+  const [xUrl, setXUrl] = useState("");
+  const [socialUrlErrors, setSocialUrlErrors] = useState({
+    linkedinUrl: "",
+    websiteUrl: "",
+    githubUrl: "",
+    xUrl: "",
+  });
   const [availableDays, setAvailableDays] = useState<string[]>(["Tue", "Thu"]);
   const [certificates, setCertificates] = useState<UploadedDocument[]>([]);
   const [publicProfileConsent, setPublicProfileConsent] = useState(false);
@@ -87,6 +100,35 @@ export default function ApplyMentorPage() {
       setIsAuthModalOpen(true);
       return;
     }
+
+    const normalizedUrls = {
+      linkedinUrl: normalizeMentorSocialUrl(linkedinUrl, "linkedin"),
+      websiteUrl: websiteUrl.trim()
+        ? normalizeMentorSocialUrl(websiteUrl, "website")
+        : null,
+      githubUrl: githubUrl.trim()
+        ? normalizeMentorSocialUrl(githubUrl, "github")
+        : null,
+      xUrl: xUrl.trim() ? normalizeMentorSocialUrl(xUrl, "x") : null,
+    };
+    const nextSocialUrlErrors = {
+      linkedinUrl: getMentorSocialUrlError(linkedinUrl, "linkedin", true),
+      websiteUrl: getMentorSocialUrlError(websiteUrl, "website"),
+      githubUrl: getMentorSocialUrlError(githubUrl, "github"),
+      xUrl: getMentorSocialUrlError(xUrl, "x"),
+    };
+    setSocialUrlErrors(nextSocialUrlErrors);
+    if (Object.values(nextSocialUrlErrors).some(Boolean)) {
+      setSubmissionError("Please check the profile links and correct the highlighted fields.");
+      return;
+    }
+
+    const applicantName = fullName.trim() || activeUser?.fullName || "";
+    setFullName(applicantName);
+    setLinkedinUrl(normalizedUrls.linkedinUrl || "");
+    setWebsiteUrl(normalizedUrls.websiteUrl || "");
+    setGithubUrl(normalizedUrls.githubUrl || "");
+    setXUrl(normalizedUrls.xUrl || "");
     setIsSubmitting(true);
     setSubmissionError("");
 
@@ -95,14 +137,17 @@ export default function ApplyMentorPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          fullName,
+          fullName: applicantName,
           title,
           organization,
           county,
           experienceYears,
           specialties: selectedSpecialties,
           bio,
-          linkedinUrl,
+          linkedinUrl: normalizedUrls.linkedinUrl,
+          websiteUrl: normalizedUrls.websiteUrl,
+          githubUrl: normalizedUrls.githubUrl,
+          xUrl: normalizedUrls.xUrl,
           availableDays,
           certificateKeys: certificates.map((file) => file.key),
           publicProfileConsent,
@@ -183,7 +228,7 @@ export default function ApplyMentorPage() {
                 )}
                 <button
                   type="button"
-                  onClick={() => router.push("/dashboard")}
+                  onClick={() => router.push("/dashboard?tab=mentor")}
                   className="mt-8 rounded-full bg-teal-400 px-8 py-3 text-xs font-bold text-slate-950 shadow-lg shadow-teal-500/20"
                 >
                   Return to Dashboard →
@@ -192,13 +237,13 @@ export default function ApplyMentorPage() {
             ) : (
               <form onSubmit={handleSubmit} className="space-y-6">
                 {submissionError && (
-                  <p role="alert" className="rounded-xl border border-rose-400/25 bg-rose-400/10 p-4 text-sm text-rose-200">
+                  <p role="alert" className="rounded-xl border border-rose-400/25 bg-rose-400/10 p-4 text-sm text-rose-100">
                     {submissionError}
                   </p>
                 )}
                 {!isAuthenticated && (
                   <div className="rounded-2xl border border-amber-300/20 bg-amber-300/5 p-4">
-                    <p className="text-sm font-semibold text-amber-200">
+                    <p className="text-sm font-semibold text-amber-100">
                       Sign in is required to submit and securely attach certificates.
                     </p>
                     <button
@@ -219,10 +264,13 @@ export default function ApplyMentorPage() {
                     <input
                       type="text"
                       required
+                      minLength={2}
+                      maxLength={120}
+                      autoComplete="name"
                       placeholder="e.g. Dr. Achieng Odhiambo"
-                      value={fullName}
+                      value={fullName || activeUser?.fullName || ""}
                       onChange={(e) => setFullName(e.target.value)}
-                      className="mt-1.5 w-full rounded-xl border border-white/10 bg-white/[0.03] px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:border-teal-400 focus:outline-none"
+                      className="mt-1.5 w-full rounded-xl border border-white/10 bg-white/[0.03] px-3.5 py-2.5 text-base text-white placeholder-slate-400 focus:border-teal-400 focus:outline-none"
                     />
                   </div>
 
@@ -235,10 +283,11 @@ export default function ApplyMentorPage() {
                       required
                       autoComplete="email"
                       inputMode="email"
+                      maxLength={254}
                       placeholder="you@organization.org"
-                      value={email}
+                      value={email || activeUser?.email || ""}
                       onChange={(e) => setEmail(e.target.value)}
-                      className="mt-1.5 w-full rounded-xl border border-white/10 bg-white/[0.03] px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:border-teal-400 focus:outline-none"
+                      className="mt-1.5 w-full rounded-xl border border-white/10 bg-white/[0.03] px-3.5 py-2.5 text-base text-white placeholder-slate-400 focus:border-teal-400 focus:outline-none"
                     />
                   </div>
                 </div>
@@ -267,10 +316,12 @@ export default function ApplyMentorPage() {
                     <input
                       type="text"
                       required
+                      minLength={2}
+                      maxLength={120}
                       placeholder="e.g. Senior Systems Architect"
                       value={title}
                       onChange={(e) => setTitle(e.target.value)}
-                      className="mt-1.5 w-full rounded-xl border border-white/10 bg-white/[0.03] px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:border-teal-400 focus:outline-none"
+                      className="mt-1.5 w-full rounded-xl border border-white/10 bg-white/[0.03] px-3.5 py-2.5 text-base text-white placeholder-slate-400 focus:border-teal-400 focus:outline-none"
                     />
                   </div>
 
@@ -281,10 +332,12 @@ export default function ApplyMentorPage() {
                     <input
                       type="text"
                       required
+                      minLength={2}
+                      maxLength={160}
                       placeholder="e.g. Savannah Digital Labs"
                       value={organization}
                       onChange={(e) => setOrganization(e.target.value)}
-                      className="mt-1.5 w-full rounded-xl border border-white/10 bg-white/[0.03] px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:border-teal-400 focus:outline-none"
+                      className="mt-1.5 w-full rounded-xl border border-white/10 bg-white/[0.03] px-3.5 py-2.5 text-base text-white placeholder-slate-400 focus:border-teal-400 focus:outline-none"
                     />
                   </div>
                 </div>
@@ -298,7 +351,7 @@ export default function ApplyMentorPage() {
                     <select
                       value={county}
                       onChange={(e) => setCounty(e.target.value)}
-                      className="mt-1.5 w-full rounded-xl border border-white/10 bg-slate-900 px-3.5 py-2.5 text-xs text-white focus:border-teal-400 focus:outline-none"
+                      className="mt-1.5 w-full rounded-xl border border-white/10 bg-slate-900 px-3.5 py-2.5 text-base text-white focus:border-teal-400 focus:outline-none"
                     >
                       {KENYA_COUNTIES.filter(
                         (c) => c !== "All Counties" && c !== "Nationwide"
@@ -362,10 +415,12 @@ export default function ApplyMentorPage() {
                   <textarea
                     rows={4}
                     required
+                    minLength={20}
+                    maxLength={3000}
                     placeholder="Describe your background and how you plan to guide early-stage Kenyan builders..."
                     value={bio}
                     onChange={(e) => setBio(e.target.value)}
-                    className="mt-1.5 w-full rounded-xl border border-white/10 bg-white/[0.03] px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:border-teal-400 focus:outline-none"
+                    className="mt-1.5 w-full rounded-xl border border-white/10 bg-white/[0.03] px-3.5 py-2.5 text-base text-white placeholder-slate-400 focus:border-teal-400 focus:outline-none"
                   />
                 </div>
 
@@ -395,20 +450,123 @@ export default function ApplyMentorPage() {
                   </div>
                 </div>
 
-                {/* LinkedIn / Portfolio */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider">
-                    LinkedIn / Website Profile URL
-                  </label>
-                  <input
-                    type="url"
-                    required
-                    placeholder="https://linkedin.com/in/yourprofile"
-                    value={linkedinUrl}
-                    onChange={(e) => setLinkedinUrl(e.target.value)}
-                    className="mt-1.5 w-full rounded-xl border border-white/10 bg-white/[0.03] px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:border-teal-400 focus:outline-none"
-                  />
-                </div>
+                <fieldset className="space-y-4">
+                  <legend className="text-xs font-bold uppercase tracking-wider text-slate-200">
+                    Professional profile links
+                  </legend>
+                  <p className="text-sm leading-6 text-slate-300">
+                    Add your public profiles so reviewers can learn more about your work. Use a full profile link; we’ll add https:// if it’s omitted.
+                  </p>
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    {(
+                      [
+                        {
+                          key: "linkedinUrl",
+                          label: "LinkedIn",
+                          required: true,
+                          value: linkedinUrl,
+                          setValue: setLinkedinUrl,
+                          placeholder: "linkedin.com/in/yourname",
+                        },
+                        {
+                          key: "websiteUrl",
+                          label: "Website or portfolio",
+                          required: false,
+                          value: websiteUrl,
+                          setValue: setWebsiteUrl,
+                          placeholder: "yourwebsite.com",
+                        },
+                        {
+                          key: "githubUrl",
+                          label: "GitHub",
+                          required: false,
+                          value: githubUrl,
+                          setValue: setGithubUrl,
+                          placeholder: "github.com/yourname",
+                        },
+                        {
+                          key: "xUrl",
+                          label: "X / Twitter",
+                          required: false,
+                          value: xUrl,
+                          setValue: setXUrl,
+                          placeholder: "x.com/yourname",
+                        },
+                      ] as const
+                    ).map((field) => (
+                      <label
+                        key={field.key}
+                        className="block min-w-0 text-xs font-semibold text-slate-200"
+                      >
+                        {field.label}
+                        {field.required ? " (required)" : " (optional)"}
+                        <input
+                          type="text"
+                          inputMode="url"
+                          autoCapitalize="none"
+                          autoCorrect="off"
+                          spellCheck={false}
+                          maxLength={500}
+                          required={field.required}
+                          value={field.value}
+                          onChange={(event) => {
+                            field.setValue(event.target.value);
+                            setSocialUrlErrors((current) => ({
+                              ...current,
+                              [field.key]: "",
+                            }));
+                          }}
+                          onBlur={() => {
+                            const rawValue = field.value;
+                            const normalized = normalizeMentorSocialUrl(
+                              rawValue,
+                              field.key === "linkedinUrl"
+                                ? "linkedin"
+                                : field.key === "websiteUrl"
+                                  ? "website"
+                                  : field.key === "githubUrl"
+                                    ? "github"
+                                    : "x"
+                            );
+                            if (normalized) field.setValue(normalized);
+                            setSocialUrlErrors((current) => ({
+                              ...current,
+                              [field.key]: getMentorSocialUrlError(
+                                rawValue,
+                                field.key === "linkedinUrl"
+                                  ? "linkedin"
+                                  : field.key === "websiteUrl"
+                                    ? "website"
+                                    : field.key === "githubUrl"
+                                      ? "github"
+                                      : "x",
+                                field.required
+                              ),
+                            }));
+                          }}
+                          aria-invalid={Boolean(socialUrlErrors[field.key])}
+                          aria-describedby={`${field.key}-hint${socialUrlErrors[field.key] ? ` ${field.key}-error` : ""}`}
+                          placeholder={field.placeholder}
+                          className="mt-1.5 min-h-11 w-full rounded-xl border border-white/15 bg-white/[0.03] px-3.5 py-2.5 text-base text-white placeholder-slate-400 outline-none focus:border-teal-300 aria-[invalid=true]:border-rose-300"
+                        />
+                        <span id={`${field.key}-hint`} className="mt-1 block text-xs font-normal text-slate-300">
+                          {field.required
+                            ? "Your LinkedIn profile is required for review."
+                            : "Optional"}
+                        </span>
+                        {socialUrlErrors[field.key] && (
+                          <span
+                            id={`${field.key}-error`}
+                            role="alert"
+                            className="mt-1 block text-xs font-medium text-rose-200"
+                          >
+                            {socialUrlErrors[field.key]}
+                          </span>
+                        )}
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
 
                 <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-teal-300/15 bg-teal-300/[0.04] p-4">
                   <input

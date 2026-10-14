@@ -2,7 +2,8 @@
 
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { ArrowPathIcon } from "@heroicons/react/24/outline";
+import Link from "next/link";
+import { ArrowPathIcon, BookmarkIcon } from "@heroicons/react/24/outline";
 import { Opportunity, OpportunityCategory } from "@/server/types/opportunity";
 import { KENYA_COUNTIES } from "@/server/data/opportunities";
 import { useApplications } from "@/context/ApplicationContext";
@@ -19,6 +20,36 @@ const CATEGORIES: OpportunityCategory[] = [
   "Scholarships",
 ];
 
+const MATCH_STOP_WORDS = new Set([
+  "and",
+  "for",
+  "from",
+  "into",
+  "the",
+  "with",
+  "you",
+  "your",
+]);
+
+function matchTokens(value: string) {
+  return (value.toLowerCase().match(/[a-z0-9+#]+/g) || []).filter(
+    (token) =>
+      (token.length >= 3 || ["ai", "ml", "ui", "ux"].includes(token)) &&
+      !MATCH_STOP_WORDS.has(token)
+  );
+}
+
+function getOpportunityText(opportunity: Opportunity) {
+  return [
+    opportunity.title,
+    opportunity.organization,
+    opportunity.category,
+    opportunity.description,
+    ...opportunity.tags,
+    ...opportunity.eligibility,
+  ].join(" ");
+}
+
 interface OpportunityBoardProps {
   currentUser?: UserProfile | null;
   onRequestSignIn?: () => void;
@@ -28,7 +59,13 @@ export default function OpportunityBoard({
   currentUser,
   onRequestSignIn,
 }: OpportunityBoardProps) {
-  const { applyToOpportunity, hasAppliedToOpportunity } = useApplications();
+  const {
+    applyToOpportunity,
+    hasAppliedToOpportunity,
+    savedOpportunityIds,
+    savedOpportunitiesLoading,
+    setOpportunitySaved,
+  } = useApplications();
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [loadError, setLoadError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
@@ -42,6 +79,9 @@ export default function OpportunityBoard({
   const [selectedCounty, setSelectedCounty] = useState<string>("All Counties");
   const [minGrantAmount, setMinGrantAmount] = useState<number>(0);
   const [searchQuery, setSearchQuery] = useState<string>("");
+  const [activeView, setActiveView] = useState<"all" | "recommended" | "saved">("all");
+  const [savingOpportunityId, setSavingOpportunityId] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState("");
 
   // Active Selected Opportunity for Modal Details
   const [selectedOpp, setSelectedOpp] = useState<Opportunity | null>(null);
@@ -113,9 +153,43 @@ export default function OpportunityBoard({
     };
   }, [selectedOpp]);
 
+  const profileKeywords = useMemo(() => {
+    if (!currentUser) return new Set<string>();
+
+    const careerStageKeywords =
+      currentUser.careerStage === "student"
+        ? "student youth learner"
+        : currentUser.careerStage === "graduate"
+        ? "graduate graduates early career"
+        : "";
+    const profileText = [
+      ...(currentUser.skills || []),
+      ...(currentUser.interests || []),
+      ...(currentUser.supportNeeds || []),
+      currentUser.goals || "",
+      currentUser.experience || "",
+      currentUser.bio || "",
+      careerStageKeywords,
+    ].join(" ");
+
+    return new Set(matchTokens(profileText));
+  }, [currentUser]);
+
+  const matchedKeywordsByOpportunity = useMemo(() => {
+    return new Map(
+      opportunities.map((opportunity) => {
+        const listingKeywords = new Set(matchTokens(getOpportunityText(opportunity)));
+        const matches = [...profileKeywords].filter((keyword) =>
+          listingKeywords.has(keyword)
+        );
+        return [opportunity.id, matches] as const;
+      })
+    );
+  }, [opportunities, profileKeywords]);
+
   // Filter Logic
   const filteredOpportunities = useMemo(() => {
-    return opportunities.filter((opp) => {
+    const filtered = opportunities.filter((opp) => {
       const matchesCategory =
         selectedCategory === "All" || opp.category === selectedCategory;
 
@@ -134,6 +208,7 @@ export default function OpportunityBoard({
       const matchesSearch =
         searchQuery.trim() === "" ||
         opp.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        opp.organization.toLowerCase().includes(searchQuery.toLowerCase()) ||
         opp.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
         opp.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
         opp.tags.some((tag) => tag.toLowerCase().includes(searchQuery.toLowerCase()));
@@ -143,9 +218,21 @@ export default function OpportunityBoard({
         matchesCounty &&
         matchesGrant &&
         matchesSearch &&
+        (activeView !== "saved" || savedOpportunityIds.includes(opp.id)) &&
+        (activeView !== "recommended" ||
+          (matchedKeywordsByOpportunity.get(opp.id)?.length ?? 0) > 0) &&
         isActiveScholarship
       );
     });
+
+    if (activeView === "recommended") {
+      return filtered.sort(
+        (first, second) =>
+          (matchedKeywordsByOpportunity.get(second.id)?.length ?? 0) -
+          (matchedKeywordsByOpportunity.get(first.id)?.length ?? 0)
+      );
+    }
+    return filtered;
   }, [
     opportunities,
     selectedCategory,
@@ -153,7 +240,27 @@ export default function OpportunityBoard({
     minGrantAmount,
     searchQuery,
     lastChecked,
+    activeView,
+    savedOpportunityIds,
+    matchedKeywordsByOpportunity,
   ]);
+
+  const toggleSavedOpportunity = async (opportunityId: string) => {
+    setSaveError("");
+    setSavingOpportunityId(opportunityId);
+    try {
+      await setOpportunitySaved(
+        opportunityId,
+        !savedOpportunityIds.includes(opportunityId)
+      );
+    } catch (error) {
+      setSaveError(
+        error instanceof Error ? error.message : "Could not update saved opportunities."
+      );
+    } finally {
+      setSavingOpportunityId(null);
+    }
+  };
 
   const handleApply = async () => {
     if (!selectedOpp) return;
@@ -199,16 +306,59 @@ export default function OpportunityBoard({
       <div className="mx-auto max-w-7xl">
         <div className="text-center">
           <h2 className="text-3xl font-extrabold tracking-tight text-white sm:text-4xl">
-            Innovation Hub & Scholarship Center
+            Discover opportunities
           </h2>
           <p className="mx-auto mt-3 max-w-2xl text-sm leading-6 text-slate-300">
-            Find scholarships, grants, accelerators, and challenges from KIOH.
-            Scholarship listings include a direct link to the provider&apos;s application.
+            Find scholarships, grants, fellowships, training, and challenges that help
+            you turn potential into progress.
           </p>
         </div>
 
         {/* Filter Toolbar */}
         <div className="mt-10 rounded-3xl border border-white/10 bg-slate-900/80 p-6 backdrop-blur-xl shadow-2xl space-y-6">
+          <div className="flex flex-wrap gap-2" aria-label="Opportunity views">
+            <button
+              type="button"
+              aria-pressed={activeView === "all"}
+              onClick={() => setActiveView("all")}
+              className={`min-h-11 rounded-xl px-4 py-2 text-xs font-semibold transition ${
+                activeView === "all"
+                  ? "bg-teal-400 text-slate-950"
+                  : "border border-white/10 bg-white/5 text-slate-400 hover:text-white"
+              }`}
+            >
+              Browse all
+            </button>
+            <button
+              type="button"
+              aria-pressed={activeView === "recommended"}
+              onClick={() => setActiveView("recommended")}
+              className={`min-h-11 rounded-xl px-4 py-2 text-xs font-semibold transition ${
+                activeView === "recommended"
+                  ? "bg-teal-400 text-slate-950"
+                  : "border border-white/10 bg-white/5 text-slate-400 hover:text-white"
+              }`}
+            >
+              Recommended
+            </button>
+            <button
+              type="button"
+              aria-pressed={activeView === "saved"}
+              onClick={() => setActiveView("saved")}
+              className={`min-h-11 rounded-xl px-4 py-2 text-xs font-semibold transition ${
+                activeView === "saved"
+                  ? "bg-teal-400 text-slate-950"
+                  : "border border-white/10 bg-white/5 text-slate-400 hover:text-white"
+              }`}
+            >
+              Saved ({savedOpportunityIds.length})
+            </button>
+          </div>
+          {saveError && (
+            <p role="status" className="rounded-xl border border-rose-300/20 bg-rose-300/5 p-3 text-xs text-rose-200">
+              {saveError}
+            </p>
+          )}
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-4">
             <p className="text-xs text-slate-300" aria-live="polite">
               {lastChecked
@@ -248,7 +398,7 @@ export default function OpportunityBoard({
               </label>
               <input
                 type="text"
-                placeholder="Search by title, keyword, or tag..."
+                placeholder="Search title, organization, or skill..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="mt-1.5 w-full rounded-xl border border-white/10 bg-white/[0.03] px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:border-teal-400 focus:outline-none"
@@ -344,9 +494,29 @@ export default function OpportunityBoard({
                       <span className="rounded-full border border-teal-400/30 bg-teal-400/10 px-3 py-1 text-[10px] font-bold text-teal-300">
                         {opp.category}
                       </span>
-                      <span className="text-[10px] font-mono text-slate-400">
-                        📍 {opp.county}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-mono text-slate-400">
+                          📍 {opp.county}
+                        </span>
+                        <button
+                          type="button"
+                          aria-label={`${savedOpportunityIds.includes(opp.id) ? "Remove saved" : "Save"} ${opp.title}`}
+                          aria-pressed={savedOpportunityIds.includes(opp.id)}
+                          title={savedOpportunityIds.includes(opp.id) ? "Remove from saved" : "Save opportunity"}
+                          onClick={() => void toggleSavedOpportunity(opp.id)}
+                          disabled={savedOpportunitiesLoading || savingOpportunityId === opp.id}
+                          className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-full border transition disabled:cursor-wait disabled:opacity-50 ${
+                            savedOpportunityIds.includes(opp.id)
+                              ? "border-teal-300/40 bg-teal-300/10 text-teal-200"
+                              : "border-white/10 bg-white/[0.03] text-slate-400 hover:border-teal-300/35 hover:text-white"
+                          }`}
+                        >
+                          <BookmarkIcon
+                            aria-hidden="true"
+                            className={`h-5 w-5 ${savedOpportunityIds.includes(opp.id) ? "fill-current" : ""}`}
+                          />
+                        </button>
+                      </div>
                     </div>
 
                     <h3 className="mt-4 text-lg font-bold text-white group-hover:text-teal-300 transition">
@@ -373,6 +543,14 @@ export default function OpportunityBoard({
                         </span>
                       ))}
                     </div>
+                    {activeView === "recommended" && (
+                      <p className="mt-3 text-[10px] leading-4 text-emerald-200">
+                        Matches your profile: {matchedKeywordsByOpportunity
+                          .get(opp.id)
+                          ?.slice(0, 4)
+                          .join(" · ")}
+                      </p>
+                    )}
                   </div>
 
                   <div className="mt-6 flex items-center justify-between border-t border-white/10 pt-4">
@@ -406,28 +584,64 @@ export default function OpportunityBoard({
           ) : (
             <div className="col-span-full rounded-3xl border border-dashed border-white/10 p-12 text-center">
               <p className="text-sm text-slate-400">
-                {selectedCategory === "Scholarships"
+                {activeView === "recommended" && profileKeywords.size === 0
+                  ? "Add skills, interests, or goals to your profile to get recommendations."
+                  : activeView === "recommended"
+                  ? "No direct matches found yet. Browse all opportunities to explore more listings."
+                  : activeView === "saved" && savedOpportunityIds.length === 0
+                  ? "You have not saved any opportunities yet. Browse all opportunities and save ones you want to revisit."
+                  : selectedCategory === "Scholarships"
                   ? "No active scholarships match your filters right now."
                   : "No opportunities match your current filter criteria."}
               </p>
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedCategory("All");
-                  setSelectedCounty("All Counties");
-                  setMinGrantAmount(0);
-                  setSearchQuery("");
-                }}
-                className="mt-4 text-xs font-semibold text-teal-300 underline"
-              >
-                Reset All Filters
-              </button>
+              <div className="mt-4 flex flex-wrap justify-center gap-4">
+                {activeView === "recommended" && profileKeywords.size === 0 && (
+                  currentUser?.id ? (
+                    <Link
+                      href="/dashboard?tab=settings"
+                      className="text-xs font-semibold text-teal-300 underline"
+                    >
+                      Complete your profile
+                    </Link>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={onRequestSignIn}
+                      className="text-xs font-semibold text-teal-300 underline"
+                    >
+                      Sign in to personalize recommendations
+                    </button>
+                  )
+                )}
+                {activeView === "recommended" && profileKeywords.size > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setActiveView("all")}
+                    className="text-xs font-semibold text-teal-300 underline"
+                  >
+                    Browse all opportunities
+                  </button>
+                )}
+                {(activeView !== "recommended" || profileKeywords.size > 0) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveView("all");
+                      setSelectedCategory("All");
+                      setSelectedCounty("All Counties");
+                      setMinGrantAmount(0);
+                      setSearchQuery("");
+                    }}
+                    className="text-xs font-semibold text-teal-300 underline"
+                  >
+                    Reset filters
+                  </button>
+                )}
+              </div>
             </div>
           )}
         </div>
       </div>
-
-      {/* Opportunity Detail & Application Modal */}
       <AnimatePresence>
       {selectedOpp && (
         <motion.div

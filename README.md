@@ -26,6 +26,12 @@ Copy `.env.example` to `.env.local` and provide the MongoDB, NextAuth, Google OA
 
 Pitch decks are accepted as private PDFs (up to 16 MB). Mentor certificates accept private PDFs or images (up to 8 MB each, three files maximum). Users must sign in to upload; files are attached to the application and are only served to their owner through short-lived signed URLs.
 
+## Mentor workspace and sessions
+
+Signed-in users can open **Mentor Workspace** from the dashboard to check an application, edit their mentor profile, and manage public-profile consent. Approved mentors see upcoming bookings assigned to their account. Session bookings are stored in MongoDB and are available to both the mentor and the person who booked.
+
+Only approved profiles with public-directory consent can be booked. Sample directory profiles are previews and are not bookable because they are not linked to mentor accounts. Session times use the `Africa/Nairobi` time zone.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

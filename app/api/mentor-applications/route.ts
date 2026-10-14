@@ -9,6 +9,7 @@ import {
   type UserUploadDocument,
 } from "@/server/lib/mongodb";
 import { KENYA_COUNTIES } from "@/server/data/opportunities";
+import { normalizeMentorSocialUrl } from "@/utils/mentorSocialUrls";
 
 const SPECIALTIES = [
   "AgriTech",
@@ -81,28 +82,59 @@ export async function POST(request: Request) {
   }
 
   try {
-    const body = await request.json();
-    const fullName = typeof body.fullName === "string" ? body.fullName.trim() : "";
-    const title = typeof body.title === "string" ? body.title.trim() : "";
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json(
+        { success: false, message: "Application data must be valid JSON." },
+        { status: 400 }
+      );
+    }
+    if (typeof body !== "object" || body === null || Array.isArray(body)) {
+      return NextResponse.json(
+        { success: false, message: "Invalid mentor application details." },
+        { status: 400 }
+      );
+    }
+    const input = body as Record<string, unknown>;
+    const fullName = typeof input.fullName === "string" ? input.fullName.trim() : "";
+    const title = typeof input.title === "string" ? input.title.trim() : "";
     const organization =
-      typeof body.organization === "string" ? body.organization.trim() : "";
-    const county = typeof body.county === "string" ? body.county : "";
-    const experienceYears = Number(body.experienceYears);
-    const bio = typeof body.bio === "string" ? body.bio.trim() : "";
+      typeof input.organization === "string" ? input.organization.trim() : "";
+    const county = typeof input.county === "string" ? input.county : "";
+    const experienceYears = Number(input.experienceYears);
+    const bio = typeof input.bio === "string" ? input.bio.trim() : "";
     const linkedinUrl =
-      typeof body.linkedinUrl === "string" ? body.linkedinUrl.trim() : "";
-    const specialties: string[] = Array.isArray(body.specialties)
-      ? body.specialties.filter(
+      typeof input.linkedinUrl === "string" ? input.linkedinUrl.trim() : "";
+    const websiteUrl =
+      typeof input.websiteUrl === "string" ? input.websiteUrl.trim() : "";
+    const githubUrl =
+      typeof input.githubUrl === "string" ? input.githubUrl.trim() : "";
+    const xUrl = typeof input.xUrl === "string" ? input.xUrl.trim() : "";
+    const normalizedLinkedInUrl = normalizeMentorSocialUrl(
+      linkedinUrl,
+      "linkedin"
+    );
+    const normalizedWebsiteUrl = websiteUrl
+      ? normalizeMentorSocialUrl(websiteUrl, "website")
+      : null;
+    const normalizedGithubUrl = githubUrl
+      ? normalizeMentorSocialUrl(githubUrl, "github")
+      : null;
+    const normalizedXUrl = xUrl ? normalizeMentorSocialUrl(xUrl, "x") : null;
+    const specialties: string[] = Array.isArray(input.specialties)
+      ? input.specialties.filter(
           (value: unknown): value is string => typeof value === "string"
         )
       : [];
-    const availableDays: string[] = Array.isArray(body.availableDays)
-      ? body.availableDays.filter(
+    const availableDays: string[] = Array.isArray(input.availableDays)
+      ? input.availableDays.filter(
           (value: unknown): value is string => typeof value === "string"
         )
       : [];
-    const certificateKeys = Array.isArray(body.certificateKeys)
-      ? body.certificateKeys.filter(
+    const certificateKeys = Array.isArray(input.certificateKeys)
+      ? input.certificateKeys.filter(
           (value: unknown): value is string => typeof value === "string"
         )
       : [];
@@ -128,16 +160,22 @@ export async function POST(request: Request) {
       invalidFields.push("years of experience");
     }
     if (bio.length < 20 || bio.length > 3000) invalidFields.push("bio");
-    if (!/^https:\/\/.+/i.test(linkedinUrl) || linkedinUrl.length > 500) {
-      invalidFields.push("LinkedIn or website profile URL");
+    if (websiteUrl && !normalizedWebsiteUrl) {
+      invalidFields.push("website URL");
+    }
+    if (githubUrl && !normalizedGithubUrl) {
+      invalidFields.push("GitHub URL");
+    }
+    if (xUrl && !normalizedXUrl) {
+      invalidFields.push("X or Twitter URL");
     }
     if (
       specialties.length === 0 ||
       specialties.some((specialty) => !SPECIALTIES.includes(specialty)) ||
       new Set(specialties).size !== specialties.length ||
-      (body.specialties != null &&
-        (!Array.isArray(body.specialties) ||
-          body.specialties.some(
+      (input.specialties != null &&
+        (!Array.isArray(input.specialties) ||
+          input.specialties.some(
             (value: unknown) => typeof value !== "string"
           )))
     ) {
@@ -147,9 +185,9 @@ export async function POST(request: Request) {
       availableDays.length === 0 ||
       availableDays.some((day) => !AVAILABLE_DAYS.includes(day)) ||
       new Set(availableDays).size !== availableDays.length ||
-      (body.availableDays != null &&
-        (!Array.isArray(body.availableDays) ||
-          body.availableDays.some(
+      (input.availableDays != null &&
+        (!Array.isArray(input.availableDays) ||
+          input.availableDays.some(
             (value: unknown) => typeof value !== "string"
           )))
     ) {
@@ -157,9 +195,9 @@ export async function POST(request: Request) {
     }
     if (
       certificateKeys.length > 3 ||
-      (body.certificateKeys != null &&
-        (!Array.isArray(body.certificateKeys) ||
-          body.certificateKeys.some(
+      (input.certificateKeys != null &&
+        (!Array.isArray(input.certificateKeys) ||
+          input.certificateKeys.some(
             (value: unknown) => typeof value !== "string"
           ))) ||
       new Set(certificateKeys).size !== certificateKeys.length
@@ -167,6 +205,16 @@ export async function POST(request: Request) {
       invalidFields.push("certificate uploads");
     }
 
+    if (!normalizedLinkedInUrl) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Please enter a valid LinkedIn profile URL.",
+          invalidFields: ["LinkedIn profile URL"],
+        },
+        { status: 400 }
+      );
+    }
     if (invalidFields.length > 0) {
       return NextResponse.json(
         {
@@ -234,10 +282,13 @@ export async function POST(request: Request) {
       experienceYears,
       specialties,
       bio,
-      linkedinUrl,
+      linkedinUrl: normalizedLinkedInUrl,
+      ...(normalizedWebsiteUrl ? { websiteUrl: normalizedWebsiteUrl } : {}),
+      ...(normalizedGithubUrl ? { githubUrl: normalizedGithubUrl } : {}),
+      ...(normalizedXUrl ? { xUrl: normalizedXUrl } : {}),
       availableDays,
       certificateKeys,
-      publicProfileConsent: body.publicProfileConsent === true,
+      publicProfileConsent: input.publicProfileConsent === true,
       status: "Under Review",
       createdAt: new Date(),
     };
